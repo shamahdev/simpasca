@@ -1,0 +1,33 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+/*
+ * Design tokens come from the HeroUI v3 default theme (@heroui/styles).
+ * Only SIMPASCA-specific tokens are declared here.
+ */
+:root {
+  /* Skala penanganan (handling scale) colors used by the map and legends. */
+  --scale-regency: var(--accent);
+  --scale-province: var(--warning);
+  --scale-national: #8b5cf6;
+
+  /* Dashboard map (Sebaran Bencana). */
+  --map-water: #f4f6f9;
+  --map-land: #cbd2dc;
+  --map-land-muted: #e3e7ec;
+  --map-border: #ffffff;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+
+  --color-scale-regency: var(--scale-regency);
+  --color-scale-province: var(--scale-province);
+  --color-scale-national: var(--scale-national);
+
+  --color-map-water: var(--map-water);
+  --color-map-land: var(--map-land);
+  --color-map-land-muted: var(--map-land-muted);
+  --color-map-border: var(--map-border);
+}
