@@ -1,5 +1,4 @@
 import type {
-  CashTransaction,
   Disaster,
   DisasterTrendPoint,
   Shipment,
@@ -172,44 +171,6 @@ export const shipments: Shipment[] = [
     receivedAt: "2026-06-10",
     status: "diterima",
     items: [{ itemName: "Selimut", quantity: 200, unit: "buah" }],
-  },
-];
-
-export const cashTransactions: CashTransaction[] = [
-  {
-    id: "kas-001",
-    kind: "masuk",
-    amount: 25_000_000,
-    description: "Donasi masyarakat",
-    date: "2026-06-16",
-  },
-  {
-    id: "kas-002",
-    kind: "keluar",
-    amount: 12_500_000,
-    description: "Pembelian beras",
-    date: "2026-06-15",
-  },
-  {
-    id: "kas-003",
-    kind: "keluar",
-    amount: 5_000_000,
-    description: "Biaya angkut",
-    date: "2026-06-14",
-  },
-  {
-    id: "kas-004",
-    kind: "masuk",
-    amount: 100_000_000,
-    description: "Dana operasional",
-    date: "2026-06-10",
-  },
-  {
-    id: "kas-005",
-    kind: "keluar",
-    amount: 30_000_000,
-    description: "Pembelian logistik",
-    date: "2026-06-09",
   },
 ];
 

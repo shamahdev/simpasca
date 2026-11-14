@@ -24,7 +24,7 @@ import { NavItem } from "@/components/layout/nav-item";
 import { PageHeader } from "@/components/layout/page-header";
 import { LinkButton } from "@/components/ui/link-button";
 import {
-  CashKindChip,
+  CashTypeChip,
   HandlingScaleChip,
   HandlingStatusChip,
   ShipmentStatusChip,
@@ -208,8 +208,8 @@ export default function ComponentCatalogPage() {
             <ShipmentStatusChip status="diterima" />
           </Row>
           <Row label="Kas">
-            <CashKindChip kind="masuk" />
-            <CashKindChip kind="keluar" />
+            <CashTypeChip type="MASUK" />
+            <CashTypeChip type="KELUAR" />
           </Row>
           <Row label="Legenda">
             <ScaleLegend />

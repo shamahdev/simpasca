@@ -2,8 +2,8 @@
 
 import { Table } from "@heroui/react";
 import type { ReactNode } from "react";
-import { CashKindChip, HandlingStatusChip } from "@/components/ui/status-chips";
-import type { CashTransactionKind, HandlingStatus } from "@/lib/types";
+import { CashTypeChip, HandlingStatusChip } from "@/components/ui/status-chips";
+import type { CashTransactionType, HandlingStatus } from "@/lib/types";
 
 function TableSection({
   title,
@@ -71,7 +71,7 @@ export function RecentDisastersTable({
 export interface RecentTransactionRow {
   id: string;
   description: string;
-  kind: CashTransactionKind;
+  type: CashTransactionType;
   /** Preformatted on the server, e.g. "Rp25.000.000". */
   amount: string;
 }
@@ -99,7 +99,7 @@ export function RecentTransactionsTable({
             <Table.Row key={row.id} id={row.id}>
               <Table.Cell>{row.description}</Table.Cell>
               <Table.Cell>
-                <CashKindChip kind={row.kind} />
+                <CashTypeChip type={row.type} />
               </Table.Cell>
               <Table.Cell className="text-right">{row.amount}</Table.Cell>
             </Table.Row>

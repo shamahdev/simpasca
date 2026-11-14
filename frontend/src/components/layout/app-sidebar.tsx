@@ -6,9 +6,18 @@ import { usePathname } from "next/navigation";
 import { NavItem } from "./nav-item";
 import { isNavItemActive, navItems } from "./nav-items";
 
-export function AppSidebar({ className = "" }: { className?: string }) {
-  const pathname = usePathname();
+interface AppSidebarProps {
+  className?: string;
+  /** Highlights the matching nav item; omit to render none active. */
+  pathname?: string;
+}
 
+/** Sidebar that highlights the current route. Wrap in Suspense (usePathname on dynamic routes). */
+export function CurrentAppSidebar({ className }: { className?: string }) {
+  return <AppSidebar className={className} pathname={usePathname()} />;
+}
+
+export function AppSidebar({ className = "", pathname }: AppSidebarProps) {
   return (
     <aside
       className={`flex w-60 shrink-0 flex-col border-r border-separator bg-surface px-3 py-5 ${className}`}
@@ -22,7 +31,9 @@ export function AppSidebar({ className = "" }: { className?: string }) {
           <NavItem
             key={item.href}
             {...item}
-            isActive={isNavItemActive(item.href, pathname)}
+            isActive={
+              pathname !== undefined && isNavItemActive(item.href, pathname)
+            }
           />
         ))}
       </nav>

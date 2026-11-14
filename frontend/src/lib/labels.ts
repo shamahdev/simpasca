@@ -1,5 +1,5 @@
 import type {
-  CashTransactionKind,
+  CashTransactionType,
   HandlingScale,
   HandlingStatus,
   ShipmentStatus,
@@ -21,7 +21,13 @@ export const shipmentStatusLabel: Record<ShipmentStatus, string> = {
   diterima: "Diterima",
 };
 
-export const cashKindLabel: Record<CashTransactionKind, string> = {
-  masuk: "Masuk",
-  keluar: "Keluar",
+export const cashTypeLabel: Record<CashTransactionType, string> = {
+  MASUK: "Masuk",
+  KELUAR: "Keluar",
+};
+
+/** "Pemasukan Rp…" / "Pengeluaran Rp…" wording used in dialogs and audit notes. */
+export const cashTypeNoun: Record<CashTransactionType, string> = {
+  MASUK: "pemasukan",
+  KELUAR: "pengeluaran",
 };

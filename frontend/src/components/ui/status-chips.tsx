@@ -1,12 +1,12 @@
 import { Chip } from "@heroui/react";
 import {
-  cashKindLabel,
+  cashTypeLabel,
   handlingScaleLabel,
   handlingStatusLabel,
   shipmentStatusLabel,
 } from "@/lib/labels";
 import type {
-  CashTransactionKind,
+  CashTransactionType,
   HandlingScale,
   HandlingStatus,
   ShipmentStatus,
@@ -67,10 +67,10 @@ export function ShipmentStatusChip({ status }: { status: ShipmentStatus }) {
   );
 }
 
-export function CashKindChip({ kind }: { kind: CashTransactionKind }) {
+export function CashTypeChip({ type }: { type: CashTransactionType }) {
   return (
-    <SoftChip color={kind === "masuk" ? "success" : "warning"}>
-      {cashKindLabel[kind]}
+    <SoftChip color={type === "MASUK" ? "success" : "warning"}>
+      {cashTypeLabel[type]}
     </SoftChip>
   );
 }

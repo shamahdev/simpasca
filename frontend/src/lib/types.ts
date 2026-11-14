@@ -42,15 +42,35 @@ export interface Shipment {
   items: ShipmentItem[];
 }
 
-/** Jenis transaksi kas (PRD KF-08). */
-export type CashTransactionKind = "masuk" | "keluar";
+/** Jenis transaksi kas (SKPL KF-08). */
+export type CashTransactionType = "MASUK" | "KELUAR";
 
+/** Row of `cash_transactions` (SKPL §3.4). */
 export interface CashTransaction {
   id: string;
-  kind: CashTransactionKind;
+  type: CashTransactionType;
+  /** Rupiah, at most 2 decimals. */
   amount: number;
   description: string;
-  date: string;
+  /** YYYY-MM-DD */
+  transactionDate: string;
+  /** Idempotency key sent on create (AB-03.4). */
+  requestKey: string;
+  /** User id (`created_by`). */
+  createdBy: number;
+  createdAt: string;
+  updatedAt: string;
+  /** Soft delete marker. */
+  deletedAt: string | null;
+}
+
+export type UserRole = "PETUGAS" | "SUPERADMIN";
+
+export interface User {
+  id: number;
+  username: string;
+  name: string;
+  role: UserRole;
 }
 
 /** Monthly disaster count per type, used by the dashboard trend chart. */

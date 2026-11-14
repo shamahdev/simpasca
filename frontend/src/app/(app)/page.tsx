@@ -1,5 +1,7 @@
+import { Skeleton } from "@heroui/react";
 import { MapPin, Plus, Users, Wallet } from "lucide-react";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { DisasterMapCard } from "@/components/dashboard/disaster-map";
 import { DisasterTrendChart } from "@/components/dashboard/disaster-trend-chart";
 import { DistributionList } from "@/components/dashboard/distribution-list";
@@ -10,6 +12,7 @@ import {
 import { StatCard } from "@/components/dashboard/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { LinkButton } from "@/components/ui/link-button";
+import { getCashSummary } from "@/lib/data/cash";
 import {
   getDashboardSummary,
   getDisasterTrend,
@@ -27,7 +30,6 @@ export const metadata: Metadata = {
 export default function DashboardPage() {
   const summary = getDashboardSummary();
   const recentDisasters = getRecentDisasters();
-  const recentTransactions = getRecentCashTransactions();
 
   return (
     <>
@@ -57,12 +59,9 @@ export default function DashboardPage() {
           icon={Users}
           href="/bencana"
         />
-        <StatCard
-          label="Total Pengeluaran"
-          value={formatRupiah(summary.totalExpense)}
-          icon={Wallet}
-          href="/anggaran"
-        />
+        <Suspense fallback={<Skeleton className="h-[104px] rounded-3xl" />}>
+          <ExpenseCard />
+        </Suspense>
       </section>
 
       <DisasterMapCard disasters={getMapDisasters()} />
@@ -90,16 +89,37 @@ export default function DashboardPage() {
             status: d.status,
           }))}
         />
-        <RecentTransactionsTable
-          total={recentTransactions.length}
-          rows={recentTransactions.map((t) => ({
-            id: t.id,
-            description: t.description,
-            kind: t.kind,
-            amount: formatRupiah(t.amount),
-          }))}
-        />
+        <Suspense fallback={<Skeleton className="h-80 rounded-3xl" />}>
+          <RecentTransactions />
+        </Suspense>
       </div>
     </>
+  );
+}
+
+async function ExpenseCard() {
+  const { totalExpense } = await getCashSummary();
+  return (
+    <StatCard
+      label="Total Pengeluaran"
+      value={formatRupiah(totalExpense)}
+      icon={Wallet}
+      href="/anggaran"
+    />
+  );
+}
+
+async function RecentTransactions() {
+  const transactions = await getRecentCashTransactions();
+  return (
+    <RecentTransactionsTable
+      total={transactions.length}
+      rows={transactions.map((t) => ({
+        id: t.id,
+        description: t.description,
+        type: t.type,
+        amount: formatRupiah(t.amount),
+      }))}
+    />
   );
 }
