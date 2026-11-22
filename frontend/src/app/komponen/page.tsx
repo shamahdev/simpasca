@@ -6,10 +6,11 @@ import {
   AlertTitle,
   Button,
   CloseButton,
+  Skeleton,
 } from "@heroui/react";
 import { ArrowUpRight, MapPin, Plus, Trash2, Users, Wallet } from "lucide-react";
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { DisasterMapCard } from "@/components/dashboard/disaster-map";
 import { DisasterTrendChart } from "@/components/dashboard/disaster-trend-chart";
 import { DistributionList } from "@/components/dashboard/distribution-list";
@@ -19,12 +20,13 @@ import {
 } from "@/components/dashboard/recent-tables";
 import { ScaleLegend } from "@/components/dashboard/scale-legend";
 import { StatCard } from "@/components/dashboard/stat-card";
-import { AppSidebar } from "@/components/layout/app-sidebar";
+import { AppSidebar, SidebarAccount } from "@/components/layout/app-sidebar";
 import { NavItem } from "@/components/layout/nav-item";
 import { PageHeader } from "@/components/layout/page-header";
 import { LinkButton } from "@/components/ui/link-button";
 import {
   CashTypeChip,
+  FulfillmentChip,
   HandlingScaleChip,
   HandlingStatusChip,
   ShipmentStatusChip,
@@ -195,21 +197,26 @@ export default function ComponentCatalogPage() {
       <Specimen title="Chip status" source="ui/status-chips.tsx">
         <div className="flex flex-col gap-4">
           <Row label="Penanganan">
-            <HandlingStatusChip status="aktif" />
-            <HandlingStatusChip status="selesai" />
+            <HandlingStatusChip status="AKTIF" />
+            <HandlingStatusChip status="SELESAI" />
           </Row>
           <Row label="Skala">
-            <HandlingScaleChip scale="kabupaten" />
-            <HandlingScaleChip scale="provinsi" />
-            <HandlingScaleChip scale="nasional" />
+            <HandlingScaleChip scale="KABUPATEN_KOTA" />
+            <HandlingScaleChip scale="PROVINSI" />
+            <HandlingScaleChip scale="NASIONAL" />
           </Row>
           <Row label="Pengiriman">
-            <ShipmentStatusChip status="dikirim" />
-            <ShipmentStatusChip status="diterima" />
+            <ShipmentStatusChip status="DIKIRIM" />
+            <ShipmentStatusChip status="DITERIMA" />
           </Row>
           <Row label="Kas">
             <CashTypeChip type="MASUK" />
             <CashTypeChip type="KELUAR" />
+          </Row>
+          <Row label="Pemenuhan">
+            <FulfillmentChip status="TERPENUHI" />
+            <FulfillmentChip status="KURANG" />
+            <FulfillmentChip status="TANPA_RASIO" />
           </Row>
           <Row label="Legenda">
             <ScaleLegend />
@@ -222,7 +229,7 @@ export default function ComponentCatalogPage() {
         source="layout/app-sidebar.tsx · layout/nav-item.tsx"
       >
         <div className="flex gap-6">
-          <AppSidebar className="h-[560px] rounded-2xl border" />
+          <AppSidebar className="h-[560px] rounded-2xl border" account={<SidebarAccount name="Shaddam Amru" />} />
           <div className="flex w-60 flex-col gap-1">
             <span className="text-xs text-muted">NavItem</span>
             <NavItem href="#" label="Default" icon={MapPin} />
@@ -250,25 +257,18 @@ export default function ComponentCatalogPage() {
       </Specimen>
 
       <Specimen title="Peta sebaran bencana" source="dashboard/disaster-map.tsx">
-        <DisasterMapCard disasters={getMapDisasters({ includeFinished: true })} />
+        <Suspense fallback={<Skeleton className="h-96 rounded-3xl" />}>
+          <LiveMap />
+        </Suspense>
       </Specimen>
 
       <Specimen
         title="Grafik dan daftar distribusi"
         source="dashboard/disaster-trend-chart.tsx · dashboard/distribution-list.tsx"
       >
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <DisasterTrendChart
-            title="Tren Bencana 6 Bulan Terakhir"
-            subtitle="Jan–Jun 2026"
-            data={getDisasterTrend()}
-            className="h-[468px]"
-          />
-          <DistributionList
-            entries={getRecentDistributions(3)}
-            className="h-[468px]"
-          />
-        </div>
+        <Suspense fallback={<Skeleton className="h-[468px] rounded-3xl" />}>
+          <LiveCharts />
+        </Suspense>
       </Specimen>
 
       <Specimen title="Tabel" source="dashboard/recent-tables.tsx">
@@ -276,12 +276,12 @@ export default function ComponentCatalogPage() {
           <RecentDisastersTable
             total={2}
             rows={[
-              { id: "1", type: "Banjir", regency: "Kab. Bandung", status: "aktif" },
+              { id: "1", type: "Banjir", regency: "Kab. Bandung", status: "AKTIF" },
               {
                 id: "2",
                 type: "Gempa bumi",
                 regency: "Kab. Cianjur",
-                status: "selesai",
+                status: "SELESAI",
               },
             ]}
           />
@@ -289,5 +289,25 @@ export default function ComponentCatalogPage() {
         </div>
       </Specimen>
     </main>
+  );
+}
+
+/** Live API data (needs a session), so these specimens stream in. */
+async function LiveMap() {
+  return <DisasterMapCard disasters={await getMapDisasters()} />;
+}
+
+async function LiveCharts() {
+  const [trend, distributions] = await Promise.all([getDisasterTrend(), getRecentDistributions(3)]);
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <DisasterTrendChart
+        title="Tren Bencana 6 Bulan Terakhir"
+        subtitle={trend.label}
+        data={trend.points}
+        className="h-[468px]"
+      />
+      <DistributionList entries={distributions} className="h-[468px]" />
+    </div>
   );
 }

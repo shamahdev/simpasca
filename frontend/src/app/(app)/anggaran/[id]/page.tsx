@@ -10,7 +10,8 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { CashTypeChip } from "@/components/ui/status-chips";
 import { getUserName } from "@/lib/auth";
-import { getCashTransaction } from "@/lib/data/cash";
+import { listAuditEntries } from "@/lib/data/audit";
+import { fromApi, getCashTransaction, type ApiCashTransaction } from "@/lib/data/cash";
 import {
   formatDateTime,
   formatLongDate,
@@ -28,27 +29,29 @@ export const metadata: Metadata = {
 const summaryOf = (t: CashTransaction) =>
   `${cashTypeNoun[t.type].replace(/^./, (c) => c.toUpperCase())} ${formatRupiah(t.amount)}`;
 
-// shortcut: the API has no audit_logs endpoint yet, so the trail shows creation and the last edit time only; list UBAH/HAPUS entries (KF-09) once it does.
-function trailOf(t: CashTransaction): TrailRow[] {
-  const rows: TrailRow[] = [
+/** Creation plus every audited change (KF-09). */
+async function trailOf(t: CashTransaction): Promise<TrailRow[]> {
+  const audits = await listAuditEntries("cash_transactions", t.id);
+  return [
     {
       key: "created",
       time: formatShortDateTime(t.createdAt),
-      user: getUserName(t.createdBy),
+      user: await getUserName(t.createdBy),
       action: "Dibuat",
       note: summaryOf(t),
     },
+    ...(await Promise.all(
+      audits.map(async (a) => ({
+        key: String(a.id),
+        time: formatShortDateTime(a.occurred_at),
+        user: await getUserName(a.user_id),
+        action: a.action === "HAPUS" ? "Dihapus" : "Diubah",
+        note: a.after_data
+          ? summaryOf(fromApi(a.after_data as unknown as ApiCashTransaction))
+          : "Data dihapus",
+      })),
+    )),
   ];
-  if (t.updatedAt !== t.createdAt) {
-    rows.push({
-      key: "updated",
-      time: formatShortDateTime(t.updatedAt),
-      user: "–",
-      action: "Diubah",
-      note: "Perubahan terakhir",
-    });
-  }
-  return rows;
 }
 
 /** Detail transaksi kas (design 05B). */
@@ -78,7 +81,7 @@ async function CashDetail({
 
   const fields = [
     ["Tanggal transaksi", formatLongDate(transaction.transactionDate)],
-    ["Petugas pencatat", getUserName(transaction.createdBy)],
+    ["Petugas pencatat", await getUserName(transaction.createdBy)],
     ["Keterangan", transaction.description || "–"],
     ["Waktu pencatatan", formatDateTime(transaction.createdAt, ", ")],
   ];
@@ -107,7 +110,7 @@ async function CashDetail({
 
       <section className="flex flex-col gap-2">
         <h2 className="text-base font-semibold">Jejak pencatatan</h2>
-        <CashTrailTable rows={trailOf(transaction)} />
+        <CashTrailTable rows={await trailOf(transaction)} />
       </section>
     </>
   );

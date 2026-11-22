@@ -2,24 +2,38 @@ import type {
   CashTransactionType,
   HandlingScale,
   HandlingStatus,
+  ItemCategory,
   ShipmentStatus,
 } from "./types";
 
 export const handlingStatusLabel: Record<HandlingStatus, string> = {
-  aktif: "Aktif",
-  selesai: "Selesai",
+  AKTIF: "Aktif",
+  SELESAI: "Selesai",
 };
 
 export const handlingScaleLabel: Record<HandlingScale, string> = {
-  kabupaten: "Kabupaten/Kota",
-  provinsi: "Provinsi",
-  nasional: "Nasional",
+  KABUPATEN_KOTA: "Kabupaten/Kota",
+  PROVINSI: "Provinsi",
+  NASIONAL: "Nasional",
 };
 
 export const shipmentStatusLabel: Record<ShipmentStatus, string> = {
-  dikirim: "Dikirim",
-  diterima: "Diterima",
+  DIKIRIM: "Dikirim",
+  DITERIMA: "Diterima",
 };
+
+export const itemCategoryLabel: Record<ItemCategory, string> = {
+  PANGAN: "Pangan",
+  SANDANG: "Sandang",
+  PAPAN: "Papan",
+  LOGISTIK_LAINNYA: "Logistik lainnya",
+};
+
+export const fulfillmentLabel = {
+  TERPENUHI: "Terpenuhi",
+  KURANG: "Kurang",
+  TANPA_RASIO: "Tanpa rasio",
+} as const;
 
 export const cashTypeLabel: Record<CashTransactionType, string> = {
   MASUK: "Masuk",

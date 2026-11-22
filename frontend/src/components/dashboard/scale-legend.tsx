@@ -2,9 +2,9 @@ import { handlingScaleLabel } from "@/lib/labels";
 import type { HandlingScale } from "@/lib/types";
 
 export const scaleDotClass: Record<HandlingScale, string> = {
-  kabupaten: "bg-scale-regency",
-  provinsi: "bg-scale-province",
-  nasional: "bg-scale-national",
+  KABUPATEN_KOTA: "bg-scale-regency",
+  PROVINSI: "bg-scale-province",
+  NASIONAL: "bg-scale-national",
 };
 
 export function ScaleLegend() {

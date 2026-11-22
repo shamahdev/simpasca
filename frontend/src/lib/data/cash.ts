@@ -1,8 +1,7 @@
 import type { CashTransaction, CashTransactionType } from "../types.ts";
-
-/** Base URL of the SIMPASCA backend (docs: /docs/api/). */
-export const API_URL =
-  process.env.SIMPASCA_API_URL ?? "https://api.simpasca.shiddiq.dev";
+import { apiRequest, deleteRow, getRow, patchJson, postJson, type Page } from "./api.ts";
+import { recordAudit } from "./audit.ts";
+import { DataError } from "./errors.ts";
 
 /** API limit: 13 integer digits, 2 decimals (UC-12 finding T2). */
 export const MAX_CASH_AMOUNT = 9_999_999_999_999.99;
@@ -19,23 +18,6 @@ export interface CashInput {
 
 export type CashField = keyof CashInput;
 export type CashFieldErrors = Partial<Record<CashField, string>>;
-
-export type CashErrorCode =
-  | "INVALID"
-  | "NOT_FOUND"
-  | "REQUEST_KEY_CONFLICT"
-  | "UNAVAILABLE";
-
-export class CashError extends Error {
-  readonly code: CashErrorCode;
-  readonly fieldErrors?: CashFieldErrors;
-
-  constructor(code: CashErrorCode, message: string, fieldErrors?: CashFieldErrors) {
-    super(message);
-    this.code = code;
-    this.fieldErrors = fieldErrors;
-  }
-}
 
 const isValidDate = (value: string) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -68,7 +50,7 @@ export function validateCashInput(input: CashInput) {
   }
 
   if (Object.keys(errors).length > 0) {
-    throw new CashError("INVALID", "Periksa kembali isian transaksi.", errors);
+    throw new DataError("INVALID", "Periksa kembali isian transaksi.", errors);
   }
   return {
     type: input.type as CashTransactionType,
@@ -119,38 +101,6 @@ export function fromApi(t: ApiCashTransaction): CashTransaction {
   };
 }
 
-const errorCodeFor = (status: number): CashErrorCode =>
-  status === 404
-    ? "NOT_FOUND"
-    : status === 409
-      ? "REQUEST_KEY_CONFLICT"
-      : status >= 500
-        ? "UNAVAILABLE"
-        : "INVALID";
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${API_URL}${path}`, {
-      ...init,
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
-      cache: "no-store",
-    });
-  } catch {
-    throw new CashError("UNAVAILABLE", "Server API tidak dapat dihubungi.");
-  }
-  if (response.status === 204) return undefined as T;
-
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new CashError(
-      errorCodeFor(response.status),
-      body?.message ?? `Permintaan ke server gagal (${response.status}).`,
-    );
-  }
-  return body as T;
-}
-
 // --- Endpoints -------------------------------------------------------------
 
 export interface CashListFilter {
@@ -172,10 +122,9 @@ export async function listCashTransactions(filter: CashListFilter = {}) {
   if (filter.dateFrom) params.set("date_from", filter.dateFrom);
   if (filter.dateTo) params.set("date_to", filter.dateTo);
 
-  const { data, meta } = await request<{
-    data: ApiCashTransaction[];
-    meta: { page: number; limit: number; total: number; total_pages: number };
-  }>(`/api/cash-transactions?${params}`);
+  const { data, meta } = await apiRequest<Page<ApiCashTransaction>>(
+    `/api/cash-transactions?${params}`,
+  );
   return {
     rows: data.map(fromApi),
     page: meta.page,
@@ -187,7 +136,7 @@ export async function listCashTransactions(filter: CashListFilter = {}) {
 
 /** GET /api/cash-transactions/summary without filters: totals over every live row (AB-04.1, finding T1). */
 export async function getCashSummary() {
-  const { data } = await request<{
+  const { data } = await apiRequest<{
     data: {
       total_transactions: number;
       total_income: string;
@@ -207,16 +156,8 @@ export async function getCashSummary() {
 export async function getCashTransaction(
   id: string,
 ): Promise<CashTransaction | undefined> {
-  if (!/^\d{1,10}$/.test(id)) return undefined;
-  try {
-    const { data } = await request<{ data: ApiCashTransaction }>(
-      `/api/cash-transactions/${id}`,
-    );
-    return fromApi(data);
-  } catch (error) {
-    if (error instanceof CashError && error.code === "NOT_FOUND") return undefined;
-    throw error;
-  }
+  const row = await getRow<ApiCashTransaction>("/api/cash-transactions", id);
+  return row && fromApi(row);
 }
 
 /**
@@ -230,22 +171,16 @@ export async function createCashTransaction(
 ): Promise<CashTransaction> {
   const { type, ...data } = validateCashInput(input);
   try {
-    const { data: created } = await request<{ data: ApiCashTransaction }>(
-      "/api/cash-transactions",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          ...data,
-          type: toApiType[type],
-          request_key: requestKey,
-          created_by: userId,
-        }),
-      },
-    );
+    const created = await postJson<ApiCashTransaction>("/api/cash-transactions", {
+      ...data,
+      type: toApiType[type],
+      request_key: requestKey,
+      created_by: userId,
+    });
     return fromApi(created);
   } catch (error) {
-    if (error instanceof CashError && error.code === "REQUEST_KEY_CONFLICT") {
-      throw new CashError(
+    if (error instanceof DataError && error.code === "CONFLICT") {
+      throw new DataError(
         error.code,
         "Transaksi ini sudah tercatat sebelumnya. Tutup formulir lalu periksa daftar transaksi.",
       );
@@ -254,22 +189,31 @@ export async function createCashTransaction(
   }
 }
 
-/** PATCH /api/cash-transactions/{id}: every attribute, including the type (finding T3). */
+/** PATCH /api/cash-transactions/{id}: every attribute, including the type (finding T3). Audited (KF-09). */
 export async function updateCashTransaction(
   id: string,
   input: CashInput,
+  userId: number,
 ): Promise<CashTransaction> {
   const { type, ...data } = validateCashInput(input);
-  const { data: updated } = await request<{ data: ApiCashTransaction }>(
-    `/api/cash-transactions/${encodeURIComponent(id)}`,
-    { method: "PATCH", body: JSON.stringify({ ...data, type: toApiType[type] }) },
-  );
+  const before = await requireCash(id);
+  const updated = await patchJson<ApiCashTransaction>(`/api/cash-transactions/${id}`, {
+    ...data,
+    type: toApiType[type],
+  });
+  await recordAudit({ userId, action: "UBAH", entityType: "cash_transactions", entityId: id, before, after: updated });
   return fromApi(updated);
 }
 
-/** DELETE /api/cash-transactions/{id}: soft delete (UC-12 A5). */
-export async function deleteCashTransaction(id: string): Promise<void> {
-  await request<void>(`/api/cash-transactions/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
+/** DELETE /api/cash-transactions/{id}: soft delete (UC-12 A5). Audited (KF-09). */
+export async function deleteCashTransaction(id: string, userId: number): Promise<void> {
+  const before = await requireCash(id);
+  await deleteRow(`/api/cash-transactions/${id}`);
+  await recordAudit({ userId, action: "HAPUS", entityType: "cash_transactions", entityId: id, before, after: null });
+}
+
+async function requireCash(id: string) {
+  const row = await getRow<ApiCashTransaction>("/api/cash-transactions", id);
+  if (!row) throw new DataError("NOT_FOUND", "Transaksi kas tidak ditemukan atau sudah dihapus.");
+  return row;
 }

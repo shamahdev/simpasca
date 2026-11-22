@@ -3,28 +3,30 @@ import { ArrowUpRight, ChevronRight } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
 import { ShipmentStatusChip } from "@/components/ui/status-chips";
 import { formatNumber, formatShortDate, shortRegencyName } from "@/lib/format";
-import type { Disaster, Shipment, ShipmentItem } from "@/lib/types";
+import type { Disaster, InventoryItem, Shipment } from "@/lib/types";
 
 export interface DistributionListEntry {
   key: string;
   shipment: Shipment;
-  item: ShipmentItem;
+  item: InventoryItem;
+  quantity: number;
   disaster?: Disaster;
 }
 
 export function DistributionListItem({
   shipment,
   item,
+  quantity,
   disaster,
 }: Omit<DistributionListEntry, "key">) {
   const destination = disaster
-    ? `${shipment.destination} · ${shortRegencyName(disaster.regency)}`
+    ? `${shipment.destination} · ${shortRegencyName(disaster.regencyCity)}`
     : shipment.destination;
 
   return (
     <li className="flex items-center gap-2 border-b border-separator py-2">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="text-sm">{item.itemName}</span>
+        <span className="text-sm">{item.name}</span>
         <span className="truncate text-xs text-muted">{destination}</span>
         <span className="text-xs text-muted">
           {shipment.code} · {formatShortDate(shipment.shippedAt)}
@@ -32,7 +34,7 @@ export function DistributionListItem({
       </div>
       <div className="flex flex-col items-end gap-1">
         <span className="text-sm font-semibold">
-          {formatNumber(item.quantity)} {item.unit}
+          {formatNumber(quantity)} {item.stockUnit}
         </span>
         <ShipmentStatusChip status={shipment.status} />
       </div>

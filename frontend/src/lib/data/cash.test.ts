@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import {
-  CashError,
-  createCashTransaction,
-  getCashTransaction,
-  updateCashTransaction,
-  validateCashInput,
-  type ApiCashTransaction,
-  type CashInput,
-} from "./cash.ts";
+import type { ApiCashTransaction, CashInput } from "./cash.ts";
+import { DataError } from "./errors.ts";
+import { mockNextRequest } from "./test-helpers.ts";
+
+mockNextRequest();
+const { createCashTransaction, getCashTransaction, updateCashTransaction, validateCashInput } =
+  await import("./cash.ts");
 
 const input = (overrides: Partial<CashInput> = {}): CashInput => ({
   type: "KELUAR",
@@ -44,8 +42,8 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-const rejectsWith = (promise: Promise<unknown>, code: CashError["code"]) =>
-  assert.rejects(promise, (e) => e instanceof CashError && e.code === code);
+const rejectsWith = (promise: Promise<unknown>, code: DataError["code"]) =>
+  assert.rejects(promise, (e) => e instanceof DataError && e.code === code);
 
 test("A3: invalid input is rejected with field errors before calling the API", () => {
   for (const [bad, field] of [
@@ -60,7 +58,7 @@ test("A3: invalid input is rejected with field errors before calling the API", (
   ] as const) {
     assert.throws(
       () => validateCashInput(input(bad)),
-      (e) => e instanceof CashError && e.code === "INVALID" && field in e.fieldErrors!,
+      (e) => e instanceof DataError && e.code === "INVALID" && field in e.fieldErrors!,
     );
   }
 });
@@ -95,14 +93,24 @@ test("create sends the API body and maps the response", async () => {
 
 test("A2/AC-19: a reused request key (409) becomes a clear conflict error", async () => {
   stubFetch(409, { message: "request_key sudah digunakan." });
-  await rejectsWith(createCashTransaction(input(), "k-1", 1), "REQUEST_KEY_CONFLICT");
+  await rejectsWith(createCashTransaction(input(), "k-1", 1), "CONFLICT");
 });
 
-test("A4: update sends every attribute, including the type", async () => {
+test("A4: update sends every attribute, including the type, and is audited (KF-09)", async () => {
   stubFetch(200, { data: { ...apiRow, type: "income" } });
-  const updated = await updateCashTransaction("7", input({ type: "MASUK" }));
-  assert.equal(calls[0].init?.method, "PATCH");
-  assert.equal(JSON.parse(String(calls[0].init?.body)).type, "income");
+  const updated = await updateCashTransaction("7", input({ type: "MASUK" }), 1);
+  assert.deepEqual(
+    calls.map((c) => `${c.init?.method ?? "GET"} ${new URL(c.url).pathname}`),
+    ["GET /api/cash-transactions/7", "PATCH /api/cash-transactions/7", "POST /api/audit-logs"],
+  );
+  assert.equal(JSON.parse(String(calls[1].init?.body)).type, "income");
+  assert.equal((calls[1].init?.headers as Record<string, string>).Authorization, "Bearer test-token");
+  assert.deepEqual(
+    (({ user_id, action, entity_type, entity_id }) => ({ user_id, action, entity_type, entity_id }))(
+      JSON.parse(String(calls[2].init?.body)),
+    ),
+    { user_id: 1, action: "UBAH", entity_type: "cash_transactions", entity_id: 7 },
+  );
   assert.equal(updated.type, "MASUK");
 });
 

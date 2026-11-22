@@ -28,6 +28,7 @@ import {
 import { cashTypeLabel } from "@/lib/labels";
 import { todayIsoDate } from "@/lib/format";
 import type { CashTransaction, CashTransactionType } from "@/lib/types";
+import { submitAction } from "@/lib/submit-action";
 
 export type CashFormValues = Pick<
   CashTransaction,
@@ -96,7 +97,7 @@ function CashTransactionForm({
 
   return (
     <I18nProvider locale="id-ID">
-      <Form action={formAction} validationErrors={error?.fieldErrors}>
+      <Form onSubmit={submitAction(formAction)} validationErrors={error?.fieldErrors}>
         <input type="hidden" name="id" value={transaction?.id ?? ""} />
         <input type="hidden" name="requestKey" value={requestKey} />
 

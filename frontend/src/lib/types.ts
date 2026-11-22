@@ -1,45 +1,78 @@
-/** Status penanganan (PRD KF-03). Operational only, not an official emergency status. */
-export type HandlingStatus = "aktif" | "selesai";
+/** Status penanganan (SKPL KF-03). Operational only, not an official emergency status. */
+export type HandlingStatus = "AKTIF" | "SELESAI";
 
-/** Skala penanganan berdasarkan tingkat administratif (PRD KF-03). */
-export type HandlingScale = "kabupaten" | "provinsi" | "nasional";
+/** Skala penanganan berdasarkan tingkat administratif (SKPL KF-03). */
+export type HandlingScale = "KABUPATEN_KOTA" | "PROVINSI" | "NASIONAL";
 
+/** Row of `disasters` (SKPL §3.4). */
 export interface Disaster {
   id: string;
-  type: string;
+  /** Display code derived from the id, e.g. "BCN-0001". */
+  code: string;
+  disasterType: string;
   province: string;
-  regency: string;
-  locationNote: string;
+  regencyCity: string;
   latitude: number | null;
   longitude: number | null;
+  locationDetails: string;
   status: HandlingStatus;
-  scale: HandlingScale;
+  handlingScale: HandlingScale;
   /** ISO 8601 date-time with offset. */
   occurredAt: string;
   affectedPeople: number;
-  affectedFamilies: number | null;
+  affectedHouseholds: number | null;
   impactNotes: string;
+  createdBy: number;
 }
 
-/** Status pengiriman (PRD KF-07). */
-export type ShipmentStatus = "dikirim" | "diterima";
+/** Kategori barang (Perka BNPB 23/2014 Pasal 8). */
+export type ItemCategory = "PANGAN" | "SANDANG" | "PAPAN" | "LOGISTIK_LAINNYA";
 
+export type NeedType = "HARIAN" | "SATU_KALI";
+
+/** Row of `inventory_items` (SKPL §3.4). */
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: ItemCategory;
+  stockUnit: string;
+  initialStock: number;
+  /** Need per person; null or <= 0 means no recommendation (KF-04.2). */
+  needRatio: number | null;
+  needType: NeedType | null;
+  /** YYYY-MM-DD, food only. */
+  expirationDate: string | null;
+}
+
+/** Status pengiriman (SKPL KF-07). */
+export type ShipmentStatus = "DIKIRIM" | "DITERIMA";
+
+/** Row of `shipment_items`. */
 export interface ShipmentItem {
-  itemName: string;
+  /** shipment_items id. */
+  id: string;
+  itemId: string;
   quantity: number;
-  unit: string;
 }
 
+/** Row of `shipments` (SKPL §3.4). */
 export interface Shipment {
   id: string;
+  /** Display code derived from the id, e.g. "DST-0001". */
   code: string;
   disasterId: string;
+  status: ShipmentStatus;
+  /** YYYY-MM-DD */
+  shippedAt: string;
+  /** YYYY-MM-DD */
+  receivedAt: string | null;
   destination: string;
   personInCharge: string;
-  shippedAt: string;
-  receivedAt: string | null;
-  status: ShipmentStatus;
+  requestKey: string;
   items: ShipmentItem[];
+  createdBy: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** Jenis transaksi kas (SKPL KF-08). */

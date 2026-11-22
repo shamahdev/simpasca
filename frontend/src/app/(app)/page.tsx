@@ -1,5 +1,5 @@
 import { Skeleton } from "@heroui/react";
-import { MapPin, Plus, Users, Wallet } from "lucide-react";
+import { MapPin, PackageX, Plus, Users, Wallet } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { DisasterMapCard } from "@/components/dashboard/disaster-map";
@@ -16,6 +16,7 @@ import { getCashSummary } from "@/lib/data/cash";
 import {
   getDashboardSummary,
   getDisasterTrend,
+  getLowStockItems,
   getMapDisasters,
   getRecentCashTransactions,
   getRecentDisasters,
@@ -28,9 +29,6 @@ export const metadata: Metadata = {
 };
 
 export default function DashboardPage() {
-  const summary = getDashboardSummary();
-  const recentDisasters = getRecentDisasters();
-
   return (
     <>
       <PageHeader
@@ -45,55 +43,122 @@ export default function DashboardPage() {
 
       <section
         aria-label="Ringkasan"
-        className="grid grid-cols-1 gap-4 md:grid-cols-3"
+        className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
       >
-        <StatCard
-          label="Bencana Aktif"
-          value={formatNumber(summary.activeDisasterCount)}
-          icon={MapPin}
-          href="/bencana"
-        />
-        <StatCard
-          label="Penduduk Terdampak"
-          value={formatNumber(summary.affectedPeople)}
-          icon={Users}
-          href="/bencana"
-        />
-        <Suspense fallback={<Skeleton className="h-[104px] rounded-3xl" />}>
+        <Suspense fallback={<CardSkeletons count={2} />}>
+          <DisasterCards />
+        </Suspense>
+        <Suspense fallback={<CardSkeletons count={1} />}>
           <ExpenseCard />
+        </Suspense>
+        <Suspense fallback={<CardSkeletons count={1} />}>
+          <LowStockCard />
         </Suspense>
       </section>
 
-      <DisasterMapCard disasters={getMapDisasters()} />
+      <Suspense fallback={<Skeleton className="h-96 rounded-3xl" />}>
+        <MapSection />
+      </Suspense>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <DisasterTrendChart
-          title="Tren Bencana 6 Bulan Terakhir"
-          subtitle="Jan–Jun 2026"
-          data={getDisasterTrend()}
-          className="xl:h-[468px]"
-        />
-        <DistributionList
-          entries={getRecentDistributions()}
-          className="xl:h-[468px]"
-        />
+        <Suspense fallback={<Skeleton className="h-[468px] rounded-3xl" />}>
+          <TrendSection />
+        </Suspense>
+        <Suspense fallback={<Skeleton className="h-[468px] rounded-3xl" />}>
+          <DistributionSection />
+        </Suspense>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <RecentDisastersTable
-          total={recentDisasters.length}
-          rows={recentDisasters.map((d) => ({
-            id: d.id,
-            type: d.type,
-            regency: d.regency,
-            status: d.status,
-          }))}
-        />
+        <Suspense fallback={<Skeleton className="h-80 rounded-3xl" />}>
+          <RecentDisasters />
+        </Suspense>
         <Suspense fallback={<Skeleton className="h-80 rounded-3xl" />}>
           <RecentTransactions />
         </Suspense>
       </div>
     </>
+  );
+}
+
+function CardSkeletons({ count }: { count: number }) {
+  return Array.from({ length: count }, (_, i) => (
+    <Skeleton key={i} className="h-[104px] rounded-3xl" />
+  ));
+}
+
+async function DisasterCards() {
+  const summary = await getDashboardSummary();
+  return (
+    <>
+      <StatCard
+        label="Bencana Aktif"
+        value={formatNumber(summary.activeDisasterCount)}
+        icon={MapPin}
+        href="/bencana?status=AKTIF"
+      />
+      <StatCard
+        label="Penduduk Terdampak"
+        value={formatNumber(summary.affectedPeople)}
+        icon={Users}
+        href="/bencana"
+      />
+    </>
+  );
+}
+
+async function LowStockCard() {
+  const lowStock = await getLowStockItems();
+  return (
+    <StatCard
+      label="Stok Kritis (≤ 10)"
+      value={`${formatNumber(lowStock.length)} barang`}
+      icon={PackageX}
+      href="/distribusi"
+      tone={lowStock.length > 0 ? "danger" : "default"}
+      note={
+        lowStock.length > 0
+          ? lowStock
+              .map(({ item, stock }) => `${item.name} ${formatNumber(stock)} ${item.stockUnit}`)
+              .join(", ")
+          : "Semua stok di atas ambang."
+      }
+    />
+  );
+}
+
+async function MapSection() {
+  return <DisasterMapCard disasters={await getMapDisasters()} />;
+}
+
+async function TrendSection() {
+  const trend = await getDisasterTrend();
+  return (
+    <DisasterTrendChart
+      title="Tren Bencana 6 Bulan Terakhir"
+      subtitle={trend.label}
+      data={trend.points}
+      className="xl:h-[468px]"
+    />
+  );
+}
+
+async function DistributionSection() {
+  return <DistributionList entries={await getRecentDistributions()} className="xl:h-[468px]" />;
+}
+
+async function RecentDisasters() {
+  const recentDisasters = await getRecentDisasters();
+  return (
+    <RecentDisastersTable
+      total={recentDisasters.length}
+      rows={recentDisasters.map((d) => ({
+        id: d.id,
+        type: d.disasterType,
+        regency: d.regencyCity,
+        status: d.status,
+      }))}
+    />
   );
 }
 

@@ -1,38 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { errorState, field, type ActionState } from "@/lib/action-state";
 import { getCurrentUser } from "@/lib/auth";
 import {
-  CashError,
   createCashTransaction,
   deleteCashTransaction,
   updateCashTransaction,
-  type CashFieldErrors,
 } from "@/lib/data/cash";
 
-export type CashActionState =
-  | { status: "idle" }
-  | { status: "success"; id: string }
-  | { status: "error"; message: string; fieldErrors?: CashFieldErrors };
-
-const field = (formData: FormData, name: string) =>
-  String(formData.get(name) ?? "");
+export type CashActionState = ActionState;
 
 function revalidateCash(id: string) {
   revalidatePath("/");
   revalidatePath("/anggaran");
   revalidatePath(`/anggaran/${id}`);
-}
-
-function toErrorState(error: unknown): CashActionState {
-  if (error instanceof CashError) {
-    return {
-      status: "error",
-      message: error.message,
-      fieldErrors: error.fieldErrors,
-    };
-  }
-  throw error;
 }
 
 /** Creates (with request key) or updates a cash transaction (UC-12). */
@@ -49,17 +31,14 @@ export async function saveCashTransaction(
   };
 
   try {
+    const user = await getCurrentUser();
     const saved = id
-      ? await updateCashTransaction(id, input)
-      : await createCashTransaction(
-          input,
-          field(formData, "requestKey"),
-          getCurrentUser().id,
-        );
+      ? await updateCashTransaction(id, input, user.id)
+      : await createCashTransaction(input, field(formData, "requestKey"), user.id);
     revalidateCash(saved.id);
     return { status: "success", id: saved.id };
   } catch (error) {
-    return toErrorState(error);
+    return errorState(error);
   }
 }
 
@@ -68,10 +47,10 @@ export async function removeCashTransaction(
   id: string,
 ): Promise<CashActionState> {
   try {
-    await deleteCashTransaction(id);
+    await deleteCashTransaction(id, (await getCurrentUser()).id);
     revalidateCash(id);
     return { status: "success", id };
   } catch (error) {
-    return toErrorState(error);
+    return errorState(error);
   }
 }

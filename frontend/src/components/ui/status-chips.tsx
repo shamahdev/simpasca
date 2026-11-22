@@ -1,6 +1,7 @@
 import { Chip } from "@heroui/react";
 import {
   cashTypeLabel,
+  fulfillmentLabel,
   handlingScaleLabel,
   handlingStatusLabel,
   shipmentStatusLabel,
@@ -32,16 +33,16 @@ function SoftChip({
 
 export function HandlingStatusChip({ status }: { status: HandlingStatus }) {
   return (
-    <SoftChip color={status === "aktif" ? "success" : "warning"}>
+    <SoftChip color={status === "AKTIF" ? "success" : "warning"}>
       {handlingStatusLabel[status]}
     </SoftChip>
   );
 }
 
 const scaleChipColor: Record<HandlingScale, ChipColor> = {
-  kabupaten: "accent",
-  provinsi: "warning",
-  nasional: "default",
+  KABUPATEN_KOTA: "accent",
+  PROVINSI: "warning",
+  NASIONAL: "default",
 };
 
 export function HandlingScaleChip({ scale }: { scale: HandlingScale }) {
@@ -49,7 +50,7 @@ export function HandlingScaleChip({ scale }: { scale: HandlingScale }) {
     <SoftChip
       color={scaleChipColor[scale]}
       className={
-        scale === "nasional"
+        scale === "NASIONAL"
           ? "bg-scale-national/15 text-scale-national"
           : undefined
       }
@@ -61,9 +62,26 @@ export function HandlingScaleChip({ scale }: { scale: HandlingScale }) {
 
 export function ShipmentStatusChip({ status }: { status: ShipmentStatus }) {
   return (
-    <SoftChip color={status === "diterima" ? "success" : "warning"}>
+    <SoftChip color={status === "DITERIMA" ? "success" : "warning"}>
       {shipmentStatusLabel[status]}
     </SoftChip>
+  );
+}
+
+const fulfillmentColor: Record<keyof typeof fulfillmentLabel, ChipColor> = {
+  TERPENUHI: "success",
+  KURANG: "warning",
+  TANPA_RASIO: "default",
+};
+
+/** Indikator pemenuhan (KF-05.1). */
+export function FulfillmentChip({
+  status,
+}: {
+  status: keyof typeof fulfillmentLabel;
+}) {
+  return (
+    <SoftChip color={fulfillmentColor[status]}>{fulfillmentLabel[status]}</SoftChip>
   );
 }
 

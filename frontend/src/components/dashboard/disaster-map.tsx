@@ -7,22 +7,30 @@ import {
   neighborPaths,
   projectToPercent,
 } from "@/lib/map/indonesia";
+import { findRegency } from "@/lib/regions";
 import type { Disaster } from "@/lib/types";
-import { DisasterMapMarkers, type MapMarker } from "./disaster-map-markers";
-import { ScaleLegend } from "./scale-legend";
+import { DisasterMapPanel, type MapMarker } from "./disaster-map-markers";
 
 const MIN_MARKER_SIZE = 8;
 const MAX_MARKER_SIZE = 20;
+
+/** Stored coordinates, else the regency centre; none means list-only (AC-27). */
+function positionOf(d: Disaster) {
+  if (d.latitude !== null && d.longitude !== null) {
+    return projectToPercent(d.longitude, d.latitude);
+  }
+  const regency = findRegency(d.province, d.regencyCity);
+  return regency ? projectToPercent(regency.longitude, regency.latitude) : null;
+}
 
 function toMarkers(disasters: Disaster[]): MapMarker[] {
   const maxPeople = Math.max(1, ...disasters.map((d) => d.affectedPeople));
 
   return disasters.flatMap((d) => {
-    if (d.latitude === null || d.longitude === null) return [];
-    const position = projectToPercent(d.longitude, d.latitude);
+    const position = positionOf(d);
     if (!position) return [];
 
-    // Marker area grows with the number of affected people (PRD KF-02).
+    // Marker area grows with the number of affected people (KF-02.3).
     const size =
       MIN_MARKER_SIZE +
       (MAX_MARKER_SIZE - MIN_MARKER_SIZE) *
@@ -33,27 +41,27 @@ function toMarkers(disasters: Disaster[]): MapMarker[] {
         id: d.id,
         ...position,
         size,
-        scale: d.scale,
+        scale: d.handlingScale,
         status: d.status,
-        title: `${d.type} · ${d.regency.replace(/^Kab\./, "Kabupaten")}`,
-        location: `${d.locationNote}, ${d.province}`,
+        title: `${d.disasterType} · ${d.regencyCity.replace(/^Kab\./, "Kabupaten")}`,
+        location: `${d.locationDetails || d.regencyCity}, ${d.province}`,
         occurredAt: formatDateTime(d.occurredAt),
         affectedPeople: `${formatNumber(d.affectedPeople)} jiwa`,
         affectedFamilies:
-          d.affectedFamilies === null
+          d.affectedHouseholds === null
             ? "–"
-            : `${formatNumber(d.affectedFamilies)} KK`,
+            : `${formatNumber(d.affectedHouseholds)} KK`,
         href: `/bencana/${d.id}`,
       },
     ];
   });
 }
 
-/** Map of Indonesia with one point per disaster (PRD KF-02). */
-export function DisasterMap({ disasters }: { disasters: Disaster[] }) {
+/** Sebaran Bencana: one point per disaster, active only by default (KF-02.3, UC-04). */
+export function DisasterMapCard({ disasters }: { disasters: Disaster[] }) {
   return (
-    <div className="relative aspect-1000/330 w-full">
-      <div className="absolute inset-0 overflow-hidden rounded-xl bg-map-water">
+    <CardRoot>
+      <DisasterMapPanel markers={toMarkers(disasters)}>
         <svg
           viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
           className="size-full"
@@ -73,18 +81,7 @@ export function DisasterMap({ disasters }: { disasters: Disaster[] }) {
             strokeWidth={0.5}
           />
         </svg>
-      </div>
-      <DisasterMapMarkers markers={toMarkers(disasters)} />
-    </div>
-  );
-}
-
-export function DisasterMapCard({ disasters }: { disasters: Disaster[] }) {
-  return (
-    <CardRoot>
-      <h2 className="text-base font-semibold">Sebaran Bencana</h2>
-      <DisasterMap disasters={disasters} />
-      <ScaleLegend />
+      </DisasterMapPanel>
     </CardRoot>
   );
 }

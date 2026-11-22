@@ -1,15 +1,15 @@
 "use client";
 
-import { CloseButton } from "@heroui/react";
+import { CloseButton, Label, Switch } from "@heroui/react";
 import { ArrowUpRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { LinkButton } from "@/components/ui/link-button";
 import {
   HandlingScaleChip,
   HandlingStatusChip,
 } from "@/components/ui/status-chips";
 import type { HandlingScale, HandlingStatus } from "@/lib/types";
-import { scaleDotClass } from "./scale-legend";
+import { ScaleLegend, scaleDotClass } from "./scale-legend";
 
 export interface MapMarker {
   id: string;
@@ -29,12 +29,56 @@ export interface MapMarker {
 }
 
 const haloClass: Record<HandlingScale, string> = {
-  kabupaten: "bg-scale-regency/20 border-scale-regency",
-  provinsi: "bg-scale-province/20 border-scale-province",
-  nasional: "bg-scale-national/20 border-scale-national",
+  KABUPATEN_KOTA: "bg-scale-regency/20 border-scale-regency",
+  PROVINSI: "bg-scale-province/20 border-scale-province",
+  NASIONAL: "bg-scale-national/20 border-scale-national",
 };
 
-export function DisasterMapMarkers({ markers }: { markers: MapMarker[] }) {
+/** Card body: title, Aktif/Semua switch (UC-04), map with markers, legend. `children` is the land SVG. */
+export function DisasterMapPanel({
+  markers: allMarkers,
+  children,
+}: {
+  markers: MapMarker[];
+  children: ReactNode;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const markers = showAll
+    ? allMarkers
+    : allMarkers.filter((m) => m.status === "AKTIF");
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-base font-semibold">Sebaran Bencana</h2>
+        <Switch isSelected={showAll} onChange={setShowAll} size="sm">
+          <Switch.Control>
+            <Switch.Thumb />
+          </Switch.Control>
+          <Switch.Content>
+            <Label className="text-xs text-muted">
+              Tampilkan bencana selesai
+            </Label>
+          </Switch.Content>
+        </Switch>
+      </div>
+      <div className="relative aspect-1000/330 w-full">
+        <div className="absolute inset-0 overflow-hidden rounded-xl bg-map-water">
+          {children}
+        </div>
+        <DisasterMapMarkers markers={markers} />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <ScaleLegend />
+        <span className="text-xs text-muted">
+          {markers.length} titik {showAll ? "(semua bencana)" : "(bencana aktif)"}
+        </span>
+      </div>
+    </>
+  );
+}
+
+function DisasterMapMarkers({ markers }: { markers: MapMarker[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = markers.find((m) => m.id === selectedId);
 
