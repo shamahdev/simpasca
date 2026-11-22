@@ -5,5 +5,6 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "main": "vinext/server/fetch-handler",
   "assets": { "directory": "dist/client", "not_found_handling": "none", "binding": "ASSETS" },
+  "kv_namespaces": [{ "binding": "VINEXT_KV_CACHE", "id": "e7e452cd26d34fbda60fb746176e37e2" }],
   "observability": { "enabled": true }
 }
