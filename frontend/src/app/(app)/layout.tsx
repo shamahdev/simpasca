@@ -7,15 +7,29 @@ import {
 } from "@/components/layout/app-sidebar";
 import { LinkButton } from "@/components/ui/link-button";
 import { getCurrentUser } from "@/lib/auth";
+import { hasPublicReadAccount } from "@/lib/data/api";
+import { redirectToLogin } from "@/lib/session";
 
 const sidebarClass = "sticky top-0 h-screen";
 
-export default function AppLayout({ children }: LayoutProps<"/">) {
-  const account = (
-    <Suspense fallback={<div className="h-20" />}>
-      <CurrentAccount />
-    </Suspense>
+export default async function AppLayout({ children }: LayoutProps<"/">) {
+  const user = await getCurrentUser();
+  // Without a public account a visitor can read nothing, so keep the old gate
+  // instead of rendering pages whose every table fails.
+  if (!user && !hasPublicReadAccount()) redirectToLogin();
+
+  const account = user ? (
+    <SidebarAccount name={user.name} />
+  ) : (
+    <>
+      <p className="text-xs text-muted">Data bantuan bencana terbuka untuk publik.</p>
+      <LinkButton href="/login" variant="outline" fullWidth>
+        <LogIn aria-hidden className="size-4" />
+        Masuk petugas
+      </LinkButton>
+    </>
   );
+
   return (
     <div className="flex min-h-screen">
       {/* Prerendered sidebar without highlight; the active item streams in. */}
@@ -24,20 +38,5 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       </Suspense>
       <main className="flex min-w-0 flex-1 flex-col gap-4 p-6">{children}</main>
     </div>
-  );
-}
-
-/** Staff see who is signed in; visitors (warga) read everything and get a way to sign in. */
-async function CurrentAccount() {
-  const user = await getCurrentUser();
-  if (user) return <SidebarAccount name={user.name} />;
-  return (
-    <>
-      <p className="text-xs text-muted">Data bantuan bencana terbuka untuk publik.</p>
-      <LinkButton href="/login" variant="outline" fullWidth>
-        <LogIn aria-hidden className="size-4" />
-        Masuk petugas
-      </LinkButton>
-    </>
   );
 }

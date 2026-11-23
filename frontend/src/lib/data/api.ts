@@ -20,27 +20,60 @@ const codeFor = (status: number): DataError["code"] =>
         : "INVALID";
 
 // shortcut: the API has no public read endpoints, so visitors read through one server-side account (SIMPASCA_PUBLIC_USERNAME / SIMPASCA_PUBLIC_PASSWORD); replace with public read-only endpoints when the backend adds them.
+
+/** True when a visitor can read: the public account is configured on this deployment. */
+export const hasPublicReadAccount = () =>
+  Boolean(process.env.SIMPASCA_PUBLIC_USERNAME && process.env.SIMPASCA_PUBLIC_PASSWORD);
+
+/** How long a failed public sign-in is remembered before it is tried again. */
+const PUBLIC_RETRY_MS = 30_000;
 let publicToken: Promise<{ token: string; expiresAt: number }> | undefined;
+let publicFailure: { error: unknown; until: number } | undefined;
 
-/** Read token for visitors without a session (transparency view). Cached until shortly before it expires. */
-async function getPublicToken(): Promise<string> {
-  const cached = publicToken && (await publicToken.catch(() => undefined));
-  if (cached && cached.expiresAt > Date.now()) return cached.token;
+/** How long a public token stays cached: the API's `expires_in`, renewed a minute early. */
+export function publicTokenLeaseSeconds(expiresIn: unknown): number {
+  const lifetime = Number(expiresIn);
+  const renewIn = Number.isFinite(lifetime) && lifetime > 0 ? lifetime - 60 : 3540;
+  return Math.max(renewIn, 30);
+}
 
+/** Signs the public account in; the token lifetime decides when to sign in again. */
+async function loginPublic(): Promise<{ token: string; expiresAt: number }> {
   const username = process.env.SIMPASCA_PUBLIC_USERNAME;
   const password = process.env.SIMPASCA_PUBLIC_PASSWORD;
   if (!username || !password) {
     throw new DataError("UNAVAILABLE", "Akses publik belum dikonfigurasi. Masuk untuk melihat data.");
   }
-  publicToken = apiRequest<{ data: { access_token: string; expires_in: number } }>("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-    anonymous: true,
-  }).then(({ data }) => ({
+  const { data } = await apiRequest<{ data: { access_token: string; expires_in: number } }>(
+    "/api/auth/login",
+    { method: "POST", body: JSON.stringify({ username, password }), anonymous: true },
+  );
+  return {
     token: data.access_token,
-    expiresAt: Date.now() + (data.expires_in - 60) * 1000,
-  }));
-  return (await publicToken).token;
+    expiresAt: Date.now() + publicTokenLeaseSeconds(data.expires_in) * 1000,
+  };
+}
+
+/**
+ * Read token for visitors without a session (transparency view). Cached until
+ * shortly before it expires. A failed sign-in is remembered for a short while,
+ * so one bad credential does not become a login attempt per data call.
+ */
+async function getPublicToken(): Promise<string> {
+  if (publicFailure && publicFailure.until > Date.now()) throw publicFailure.error;
+  publicFailure = undefined;
+
+  const cached = publicToken && (await publicToken.catch(() => undefined));
+  if (cached && cached.expiresAt > Date.now()) return cached.token;
+
+  publicToken = loginPublic();
+  try {
+    return (await publicToken).token;
+  } catch (error) {
+    publicToken = undefined;
+    publicFailure = { error, until: Date.now() + PUBLIC_RETRY_MS };
+    throw error;
+  }
 }
 
 /**
