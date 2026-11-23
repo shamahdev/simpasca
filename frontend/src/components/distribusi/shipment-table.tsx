@@ -14,6 +14,8 @@ import {
   type ShipmentFormValues,
 } from "./shipment-dialog";
 import { ConfirmReceiptDialog, DeleteShipmentDialog } from "./shipment-status-dialogs";
+import { useCanEdit } from "@/components/ui/editor-only";
+import { LinkButton } from "@/components/ui/link-button";
 
 /** A shipment with server-formatted display strings. */
 export interface ShipmentRow extends ShipmentFormValues {
@@ -29,7 +31,9 @@ const ALL = "semua";
 const STATUSES: ShipmentStatus[] = ["DIKIRIM", "DITERIMA"];
 
 export function AddShipmentButton({ options }: { options: ShipmentFormOptions }) {
+  const canEdit = useCanEdit();
   const [isOpen, setIsOpen] = useState(false);
+  if (!canEdit) return null;
   return (
     <>
       <Button onPress={() => setIsOpen(true)}>
@@ -52,6 +56,7 @@ export function ShipmentTable({
   options: ShipmentFormOptions;
 }) {
   const router = useRouter();
+  const canEdit = useCanEdit();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(ALL);
   const [disaster, setDisaster] = useState(ALL);
@@ -133,6 +138,7 @@ export function ShipmentTable({
                     <ShipmentStatusChip status={row.status} />
                   </Table.Cell>
                   <Table.Cell>
+                    {canEdit ? (
                     <Dropdown>
                       <Button variant="ghost" size="sm" isIconOnly aria-label={`Aksi untuk ${row.code}`}>
                         <Ellipsis aria-hidden className="size-4" />
@@ -161,6 +167,11 @@ export function ShipmentTable({
                         </Dropdown.Menu>
                       </Dropdown.Popover>
                     </Dropdown>
+                    ) : (
+                      <LinkButton href={`/distribusi/${row.id}`} variant="ghost" size="sm" isIconOnly aria-label={`Lihat detail ${row.code}`}>
+                        <Eye aria-hidden className="size-4" />
+                      </LinkButton>
+                    )}
                   </Table.Cell>
                 </Table.Row>
               ))}

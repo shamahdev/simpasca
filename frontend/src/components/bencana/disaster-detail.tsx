@@ -10,10 +10,12 @@ import type { FulfillmentStatus } from "@/lib/data/shipments";
 import type { ShipmentStatus } from "@/lib/types";
 import { DisasterDialog } from "./disaster-dialog";
 import { DeleteDisasterDialog, type DisasterRow } from "./disaster-table";
+import { useCanEdit } from "@/components/ui/editor-only";
 
 /** Kembali / Ubah data / Hapus (design 03B). */
 export function DisasterDetailActions({ disaster }: { disaster: DisasterRow }) {
   const router = useRouter();
+  const canEdit = useCanEdit();
   const [openDialog, setOpenDialog] = useState<"edit" | "delete">();
 
   return (
@@ -22,14 +24,18 @@ export function DisasterDetailActions({ disaster }: { disaster: DisasterRow }) {
         <ArrowLeft aria-hidden className="size-4" />
         Kembali
       </LinkButton>
-      <Button variant="outline" onPress={() => setOpenDialog("edit")}>
-        <Pencil aria-hidden className="size-4" />
-        Ubah data
-      </Button>
-      <Button variant="danger-soft" onPress={() => setOpenDialog("delete")}>
-        <Trash2 aria-hidden className="size-4" />
-        Hapus
-      </Button>
+      {canEdit && (
+        <>
+          <Button variant="outline" onPress={() => setOpenDialog("edit")}>
+            <Pencil aria-hidden className="size-4" />
+            Ubah data
+          </Button>
+          <Button variant="danger-soft" onPress={() => setOpenDialog("delete")}>
+            <Trash2 aria-hidden className="size-4" />
+            Hapus
+          </Button>
+        </>
+      )}
 
       <DisasterDialog
         disaster={disaster}

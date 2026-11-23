@@ -8,6 +8,7 @@
     "dev": "next dev",
     "dev:vinext": "vinext dev",
     "lint": "eslint",
+    "seed": "node scripts/seed-api.mjs",
     "start": "next start",
     "test": "node --test --experimental-test-module-mocks \"src/**/*.test.ts\""
   },

@@ -18,6 +18,8 @@ import { HandlingStatusChip } from "@/components/ui/status-chips";
 import { handlingScaleLabel, handlingStatusLabel } from "@/lib/labels";
 import { HANDLING_SCALES, HANDLING_STATUSES } from "@/lib/options";
 import { DisasterDialog, type DisasterFormValues } from "./disaster-dialog";
+import { useCanEdit } from "@/components/ui/editor-only";
+import { LinkButton } from "@/components/ui/link-button";
 
 /** A disaster with server-formatted display strings. */
 export interface DisasterRow extends DisasterFormValues {
@@ -31,7 +33,9 @@ export interface DisasterRow extends DisasterFormValues {
 const ALL = "semua";
 
 export function AddDisasterButton() {
+  const canEdit = useCanEdit();
   const [isOpen, setIsOpen] = useState(false);
+  if (!canEdit) return null;
   return (
     <>
       <Button onPress={() => setIsOpen(true)}>
@@ -68,6 +72,7 @@ export function DeleteDisasterDialog({
 /** Data Bencana list (design 03, UC-05). */
 export function DisasterTable({ rows }: { rows: DisasterRow[] }) {
   const router = useRouter();
+  const canEdit = useCanEdit();
   const initialStatus = useSearchParams().get("status");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(
@@ -147,6 +152,7 @@ export function DisasterTable({ rows }: { rows: DisasterRow[] }) {
                     <HandlingStatusChip status={row.status} />
                   </Table.Cell>
                   <Table.Cell>
+                    {canEdit ? (
                     <Dropdown>
                       <Button variant="ghost" size="sm" isIconOnly aria-label={`Aksi untuk ${row.name}`}>
                         <Ellipsis aria-hidden className="size-4" />
@@ -168,6 +174,11 @@ export function DisasterTable({ rows }: { rows: DisasterRow[] }) {
                         </Dropdown.Menu>
                       </Dropdown.Popover>
                     </Dropdown>
+                    ) : (
+                      <LinkButton href={`/bencana/${row.id}`} variant="ghost" size="sm" isIconOnly aria-label={`Lihat detail ${row.name}`}>
+                        <Eye aria-hidden className="size-4" />
+                      </LinkButton>
+                    )}
                   </Table.Cell>
                 </Table.Row>
               ))}

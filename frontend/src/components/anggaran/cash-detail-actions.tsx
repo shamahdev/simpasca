@@ -8,10 +8,12 @@ import { LinkButton } from "@/components/ui/link-button";
 import { CashTransactionDialog } from "./cash-transaction-dialog";
 import type { CashRow } from "./cash-book-table";
 import { DeleteCashTransactionDialog } from "./delete-cash-transaction-dialog";
+import { useCanEdit } from "@/components/ui/editor-only";
 
 /** Kembali / Ubah data / Hapus buttons on the detail page (design 05B). */
 export function CashDetailActions({ transaction }: { transaction: CashRow }) {
   const router = useRouter();
+  const canEdit = useCanEdit();
   const [openDialog, setOpenDialog] = useState<"edit" | "delete">();
 
   return (
@@ -20,14 +22,18 @@ export function CashDetailActions({ transaction }: { transaction: CashRow }) {
         <ArrowLeft aria-hidden className="size-4" />
         Kembali
       </LinkButton>
-      <Button variant="outline" onPress={() => setOpenDialog("edit")}>
-        <Pencil aria-hidden className="size-4" />
-        Ubah data
-      </Button>
-      <Button variant="danger-soft" onPress={() => setOpenDialog("delete")}>
-        <Trash2 aria-hidden className="size-4" />
-        Hapus
-      </Button>
+      {canEdit && (
+        <>
+          <Button variant="outline" onPress={() => setOpenDialog("edit")}>
+            <Pencil aria-hidden className="size-4" />
+            Ubah data
+          </Button>
+          <Button variant="danger-soft" onPress={() => setOpenDialog("delete")}>
+            <Trash2 aria-hidden className="size-4" />
+            Hapus
+          </Button>
+        </>
+      )}
 
       <CashTransactionDialog
         transaction={transaction}

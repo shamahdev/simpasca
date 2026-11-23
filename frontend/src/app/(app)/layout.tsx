@@ -1,16 +1,18 @@
+import { LogIn } from "lucide-react";
 import { Suspense } from "react";
 import {
   AppSidebar,
   CurrentAppSidebar,
   SidebarAccount,
 } from "@/components/layout/app-sidebar";
+import { LinkButton } from "@/components/ui/link-button";
 import { getCurrentUser } from "@/lib/auth";
 
 const sidebarClass = "sticky top-0 h-screen";
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
   const account = (
-    <Suspense fallback={<SidebarAccount name="…" />}>
+    <Suspense fallback={<div className="h-20" />}>
       <CurrentAccount />
     </Suspense>
   );
@@ -25,7 +27,17 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
   );
 }
 
+/** Staff see who is signed in; visitors (warga) read everything and get a way to sign in. */
 async function CurrentAccount() {
   const user = await getCurrentUser();
-  return <SidebarAccount name={user.name} />;
+  if (user) return <SidebarAccount name={user.name} />;
+  return (
+    <>
+      <p className="text-xs text-muted">Data bantuan bencana terbuka untuk publik.</p>
+      <LinkButton href="/login" variant="outline" fullWidth>
+        <LogIn aria-hidden className="size-4" />
+        Masuk petugas
+      </LinkButton>
+    </>
+  );
 }

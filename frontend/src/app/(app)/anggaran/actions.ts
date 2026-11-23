@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { errorState, field, type ActionState } from "@/lib/action-state";
-import { getCurrentUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import {
   createCashTransaction,
   deleteCashTransaction,
@@ -31,7 +31,7 @@ export async function saveCashTransaction(
   };
 
   try {
-    const user = await getCurrentUser();
+    const user = await requireUser();
     const saved = id
       ? await updateCashTransaction(id, input, user.id)
       : await createCashTransaction(input, field(formData, "requestKey"), user.id);
@@ -47,7 +47,7 @@ export async function removeCashTransaction(
   id: string,
 ): Promise<CashActionState> {
   try {
-    await deleteCashTransaction(id, (await getCurrentUser()).id);
+    await deleteCashTransaction(id, (await requireUser()).id);
     revalidateCash(id);
     return { status: "success", id };
   } catch (error) {

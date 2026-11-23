@@ -13,6 +13,7 @@ import {
   Label,
   TextField,
 } from "@heroui/react";
+import Link from "next/link";
 import { useActionState } from "react";
 import type { ActionState } from "@/lib/action-state";
 import { login } from "./actions";
@@ -49,6 +50,9 @@ export function LoginForm() {
         <Button type="submit" fullWidth isPending={isPending}>
           Masuk
         </Button>
+        <Link href="/" className="text-center text-sm text-muted hover:underline">
+          Lihat data tanpa masuk
+        </Link>
       </Form>
     </Card>
   );

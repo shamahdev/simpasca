@@ -10,6 +10,7 @@ import type { ShipmentStatus } from "@/lib/types";
 import { ShipmentDialog, type ShipmentFormOptions } from "./shipment-dialog";
 import { ConfirmReceiptDialog, DeleteShipmentDialog } from "./shipment-status-dialogs";
 import type { ShipmentRow } from "./shipment-table";
+import { useCanEdit } from "@/components/ui/editor-only";
 
 type DialogKind = "edit" | "receive" | "delete";
 
@@ -22,6 +23,7 @@ export function ShipmentDetailActions({
   options: ShipmentFormOptions;
 }) {
   const router = useRouter();
+  const canEdit = useCanEdit();
   const [openDialog, setOpenDialog] = useState<DialogKind>();
   const dialogProps = (kind: DialogKind) => ({
     isOpen: openDialog === kind,
@@ -34,15 +36,19 @@ export function ShipmentDetailActions({
         <ArrowLeft aria-hidden className="size-4" />
         Kembali
       </LinkButton>
-      <Button variant="outline" onPress={() => setOpenDialog("edit")}>
-        <Pencil aria-hidden className="size-4" />
-        Ubah data
-      </Button>
-      <Button variant="danger-soft" onPress={() => setOpenDialog("delete")}>
-        <Trash2 aria-hidden className="size-4" />
-        Hapus
-      </Button>
-      {shipment.status === "DIKIRIM" && (
+      {canEdit && (
+        <>
+          <Button variant="outline" onPress={() => setOpenDialog("edit")}>
+            <Pencil aria-hidden className="size-4" />
+            Ubah data
+          </Button>
+          <Button variant="danger-soft" onPress={() => setOpenDialog("delete")}>
+            <Trash2 aria-hidden className="size-4" />
+            Hapus
+          </Button>
+        </>
+      )}
+      {canEdit && shipment.status === "DIKIRIM" && (
         <Button onPress={() => setOpenDialog("receive")}>
           <Check aria-hidden className="size-4" />
           Konfirmasi penerimaan

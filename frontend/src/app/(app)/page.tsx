@@ -11,6 +11,7 @@ import {
 } from "@/components/dashboard/recent-tables";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
+import { EditorOnly } from "@/components/ui/editor-only";
 import { LinkButton } from "@/components/ui/link-button";
 import { getCashSummary } from "@/lib/data/cash";
 import {
@@ -34,10 +35,12 @@ export default function DashboardPage() {
       <PageHeader
         title="Dasbor"
         actions={
-          <LinkButton href="/bencana">
-            <Plus aria-hidden className="size-4" />
-            Catat
-          </LinkButton>
+          <EditorOnly>
+            <LinkButton href="/bencana">
+              <Plus aria-hidden className="size-4" />
+              Catat
+            </LinkButton>
+          </EditorOnly>
         }
       />
 

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { errorState, field, type ActionState } from "@/lib/action-state";
-import { getCurrentUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import {
   createDisaster,
   deleteDisaster,
@@ -43,7 +43,7 @@ export async function saveDisaster(
   ) as unknown as DisasterInput;
 
   try {
-    const { id: userId } = await getCurrentUser();
+    const { id: userId } = await requireUser();
     const saved = id
       ? await updateDisaster(id, input, userId)
       : await createDisaster(input, userId);
@@ -57,7 +57,7 @@ export async function saveDisaster(
 /** Deletes a disaster; refused while shipments reference it (KF-03.1, AC-18). */
 export async function removeDisaster(id: string): Promise<ActionState> {
   try {
-    await deleteDisaster(id, (await getCurrentUser()).id);
+    await deleteDisaster(id, (await requireUser()).id);
     revalidateDisaster(id);
     return { status: "success", id };
   } catch (error) {

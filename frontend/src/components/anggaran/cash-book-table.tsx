@@ -29,6 +29,7 @@ import {
   type CashFormValues,
 } from "./cash-transaction-dialog";
 import { DeleteCashTransactionDialog } from "./delete-cash-transaction-dialog";
+import { useCanEdit } from "@/components/ui/editor-only";
 
 /** A cash transaction with server-formatted display strings. */
 export interface CashRow extends CashFormValues {
@@ -56,7 +57,9 @@ function hrefFor({ type, period, page }: CashFilters) {
 }
 
 export function AddCashTransactionButton() {
+  const canEdit = useCanEdit();
   const [isOpen, setIsOpen] = useState(false);
+  if (!canEdit) return null;
   return (
     <>
       <Button onPress={() => setIsOpen(true)}>
@@ -89,6 +92,7 @@ export function CashBookTable({
   periodOptions,
 }: CashBookTableProps) {
   const router = useRouter();
+  const canEdit = useCanEdit();
   const [query, setQuery] = useState("");
   const [target, setTarget] = useState<CashRow>();
   const [openDialog, setOpenDialog] = useState<"edit" | "delete">();
@@ -177,6 +181,7 @@ export function CashBookTable({
                   </Table.Cell>
                   <Table.Cell className="text-right">{row.amountText}</Table.Cell>
                   <Table.Cell>
+                    {canEdit ? (
                     <Dropdown>
                       <Button
                         variant="ghost"
@@ -207,6 +212,11 @@ export function CashBookTable({
                         </Dropdown.Menu>
                       </Dropdown.Popover>
                     </Dropdown>
+                    ) : (
+                      <LinkButton href={`/anggaran/${row.id}`} variant="ghost" size="sm" isIconOnly aria-label={`Lihat detail ${row.description}`}>
+                        <Eye aria-hidden className="size-4" />
+                      </LinkButton>
+                    )}
                   </Table.Cell>
                 </Table.Row>
               ))}

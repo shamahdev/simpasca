@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { errorState, field, type ActionState } from "@/lib/action-state";
-import { getCurrentUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import {
   confirmShipmentReceived,
   createShipment,
@@ -48,7 +48,7 @@ export async function saveShipment(
   };
 
   try {
-    const { id: userId } = await getCurrentUser();
+    const { id: userId } = await requireUser();
     const before = id ? await getShipment(id) : undefined;
     const saved = id
       ? await updateShipment(id, input, userId)
@@ -72,7 +72,7 @@ export async function confirmReceipt(
     const saved = await confirmShipmentReceived(
       field(formData, "id"),
       field(formData, "receivedAt"),
-      (await getCurrentUser()).id,
+      (await requireUser()).id,
     );
     revalidateShipment(saved.id, saved.disasterId);
     return { status: "success", id: saved.id };
@@ -84,7 +84,7 @@ export async function confirmReceipt(
 /** Soft-deletes a shipment; stock and shipped totals follow (KF-09.3). */
 export async function removeShipment(id: string): Promise<ActionState> {
   try {
-    const shipment = await deleteShipment(id, (await getCurrentUser()).id);
+    const shipment = await deleteShipment(id, (await requireUser()).id);
     revalidateShipment(id, shipment.disasterId);
     return { status: "success", id };
   } catch (error) {
