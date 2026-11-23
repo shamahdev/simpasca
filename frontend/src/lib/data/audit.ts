@@ -8,7 +8,7 @@ import { listAll, postJson } from "./api.ts";
 export async function recordAudit(entry: {
   userId: number;
   action: "UBAH" | "HAPUS";
-  entityType: "disasters" | "shipments" | "cash_transactions";
+  entityType: "disasters" | "shipments" | "cash_transactions" | "inventory_items" | "stock_receipts";
   entityId: string;
   before: object;
   after: object | null;

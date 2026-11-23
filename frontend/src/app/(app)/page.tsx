@@ -117,7 +117,7 @@ async function LowStockCard() {
       label="Stok Kritis (≤ 10)"
       value={`${formatNumber(lowStock.length)} barang`}
       icon={PackageX}
-      href="/distribusi"
+      href="/logistik"
       tone={lowStock.length > 0 ? "danger" : "default"}
       note={
         lowStock.length > 0

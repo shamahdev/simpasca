@@ -12,10 +12,8 @@ import {
   I18nProvider,
   Input,
   Label,
-  ListBox,
   Modal,
   NumberField,
-  Select,
   TextArea,
   TextField,
 } from "@heroui/react";
@@ -25,9 +23,11 @@ import { saveDisaster } from "@/app/(app)/bencana/actions";
 import type { ActionState } from "@/lib/action-state";
 import { handlingScaleLabel, handlingStatusLabel } from "@/lib/labels";
 import { DISASTER_TYPES, HANDLING_SCALES, HANDLING_STATUSES } from "@/lib/options";
-import { regions } from "@/lib/regions";
+import { findRegency, matchRegion, regions, type PlaceAddress } from "@/lib/regions";
 import type { HandlingScale, HandlingStatus } from "@/lib/types";
 import { submitAction } from "@/lib/submit-action";
+import { OptionSelect } from "@/components/ui/option-select";
+import { LocationPicker } from "./location-picker";
 
 export interface DisasterFormValues {
   id: string;
@@ -80,53 +80,6 @@ export function DisasterDialog({ disaster, isOpen, onOpenChange }: DisasterDialo
 const nowInJakarta = () =>
   new Date().toLocaleString("sv-SE", { timeZone: "Asia/Jakarta" }).slice(0, 16).replace(" ", "T");
 
-function OptionSelect<T extends string>({
-  name,
-  label,
-  placeholder,
-  options,
-  defaultValue,
-  value,
-  onChange,
-  isRequired = true,
-}: {
-  name: string;
-  label: string;
-  placeholder: string;
-  options: [T, string][];
-  defaultValue?: T;
-  value?: T;
-  onChange?: (value: T) => void;
-  isRequired?: boolean;
-}) {
-  return (
-    <Select
-      name={name}
-      isRequired={isRequired}
-      placeholder={placeholder}
-      defaultValue={defaultValue}
-      {...(onChange && { value: value ?? null, onChange: (key) => onChange(key as T) })}
-    >
-      <Label>{label}</Label>
-      <Select.Trigger>
-        <Select.Value />
-        <Select.Indicator />
-      </Select.Trigger>
-      <FieldError />
-      <Select.Popover>
-        <ListBox>
-          {options.map(([id, text]) => (
-            <ListBox.Item key={id} id={id} textValue={text}>
-              {text}
-              <ListBox.ItemIndicator />
-            </ListBox.Item>
-          ))}
-        </ListBox>
-      </Select.Popover>
-    </Select>
-  );
-}
-
 function DisasterForm({
   disaster,
   onSaved,
@@ -136,6 +89,27 @@ function DisasterForm({
 }) {
   const [province, setProvince] = useState(disaster?.province ?? "");
   const [regencyCity, setRegencyCity] = useState(disaster?.regencyCity ?? "");
+  // NaN = empty, as the NumberFields expect.
+  const [latitude, setLatitude] = useState(disaster?.latitude ?? NaN);
+  const [longitude, setLongitude] = useState(disaster?.longitude ?? NaN);
+  const hasPoint = !Number.isNaN(latitude) && !Number.isNaN(longitude);
+  const [locationDetails, setLocationDetails] = useState(disaster?.locationDetails ?? "");
+  const [autoDetails, setAutoDetails] = useState("");
+  const [detected, setDetected] = useState<{ label: string; complete: boolean }>();
+
+  /** A point picked on the map fills in the region; details only when the user has not typed their own. */
+  function applyPlace(address: PlaceAddress) {
+    const match = matchRegion(address);
+    if (match.province) {
+      setProvince(match.province);
+      setRegencyCity(match.regencyCity ?? "");
+    }
+    if (match.details && (locationDetails === "" || locationDetails === autoDetails)) {
+      setLocationDetails(match.details);
+      setAutoDetails(match.details);
+    }
+    setDetected({ label: match.label, complete: Boolean(match.regencyCity) });
+  }
   const [state, formAction, isPending] = useActionState(
     async (prev: ActionState, formData: FormData) => {
       const result = await saveDisaster(prev, formData);
@@ -151,7 +125,6 @@ function DisasterForm({
       <Form onSubmit={submitAction(formAction)} validationErrors={error?.fieldErrors}>
         <input type="hidden" name="id" value={disaster?.id ?? ""} />
         <Modal.Body className="flex flex-col gap-4">
-          <h3 className="text-sm leading-6 font-medium">Identitas kejadian</h3>
           {error && !error.fieldErrors && (
             <AlertRoot status="danger">
               <AlertIndicator />
@@ -160,6 +133,24 @@ function DisasterForm({
               </AlertContent>
             </AlertRoot>
           )}
+          <LocationPicker
+            value={hasPoint ? { latitude, longitude } : null}
+            fallbackCenter={findRegency(province, regencyCity) ?? null}
+            onChange={(point) => {
+              setLatitude(point.latitude);
+              setLongitude(point.longitude);
+            }}
+            onPlace={applyPlace}
+          />
+          {detected && (
+            <p className={`-mt-2 text-xs ${detected.complete ? "text-muted" : "text-warning"}`}>
+              {detected.complete
+                ? `Wilayah terdeteksi: ${detected.label}. Provinsi dan kabupaten/kota sudah dipilih.`
+                : `Wilayah terdeteksi: ${detected.label || "tidak diketahui"}, belum ada di daftar wilayah. Pilih provinsi dan kabupaten/kota secara manual.`}
+            </p>
+          )}
+
+          <h3 className="text-sm leading-6 font-medium">Identitas kejadian</h3>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <OptionSelect
@@ -197,7 +188,8 @@ function DisasterForm({
             />
             <NumberField
               name="latitude"
-              defaultValue={disaster?.latitude ?? undefined}
+              value={latitude}
+              onChange={setLatitude}
               formatOptions={{ maximumFractionDigits: 6 }}
             >
               <Label>Lintang</Label>
@@ -208,7 +200,8 @@ function DisasterForm({
             </NumberField>
             <NumberField
               name="longitude"
-              defaultValue={disaster?.longitude ?? undefined}
+              value={longitude}
+              onChange={setLongitude}
               formatOptions={{ maximumFractionDigits: 6 }}
             >
               <Label>Bujur</Label>
@@ -262,7 +255,7 @@ function DisasterForm({
             </NumberField>
           </div>
 
-          <TextField name="locationDetails" maxLength={500} defaultValue={disaster?.locationDetails}>
+          <TextField name="locationDetails" maxLength={500} value={locationDetails} onChange={setLocationDetails}>
             <Label>Keterangan tambahan lokasi</Label>
             <Input placeholder="Kecamatan, desa, atau penanda lokasi" />
             <FieldError />

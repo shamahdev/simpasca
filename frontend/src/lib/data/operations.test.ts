@@ -35,7 +35,7 @@ const disasterInput = (overrides: Partial<DisasterInput> = {}): DisasterInput =>
 
 const item = (overrides: Partial<InventoryItem>): InventoryItem => ({
   id: "1", name: "Beras", category: "PANGAN", stockUnit: "kg", initialStock: 0,
-  needRatio: 0.5, needType: "HARIAN", expirationDate: null, ...overrides,
+  needRatio: 0.5, needType: "HARIAN", ratioBasis: null, expirationDate: null, ...overrides,
 });
 
 const beras = item({ id: "1", name: "Beras", needRatio: 0.5, needType: "HARIAN", expirationDate: "2027-03-01" });

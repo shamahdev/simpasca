@@ -40,8 +40,41 @@ export interface InventoryItem {
   /** Need per person; null or <= 0 means no recommendation (KF-04.2). */
   needRatio: number | null;
   needType: NeedType | null;
+  /** Basis of the ratio, e.g. "orang/hari". */
+  ratioBasis: string | null;
   /** YYYY-MM-DD, food only. */
   expirationDate: string | null;
+}
+
+/** Jenis pergerakan stok (SKPL KF-06.2). */
+export type MovementType = "STOK_AWAL" | "PENERIMAAN" | "PENGIRIMAN" | "KOREKSI";
+
+/** Row of `stock_movements`; stock = SUM(quantityIn) − SUM(quantityOut) (AB-02). */
+export interface StockMovement {
+  id: string;
+  itemId: string;
+  disasterId: string | null;
+  receiptId: string | null;
+  movementType: MovementType;
+  quantityIn: number;
+  quantityOut: number;
+  /** YYYY-MM-DD */
+  movementDate: string;
+  notes: string;
+  createdAt: string;
+}
+
+/** Row of `stock_receipts` (SKPL KF-06.1). */
+export interface StockReceipt {
+  id: string;
+  itemId: string;
+  quantity: number;
+  /** YYYY-MM-DD */
+  receiptDate: string;
+  sourceGiver: string;
+  itemCondition: string;
+  notes: string;
+  createdBy: number;
 }
 
 /** Status pengiriman (SKPL KF-07). */

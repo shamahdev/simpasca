@@ -3,6 +3,8 @@ import type {
   HandlingScale,
   HandlingStatus,
   ItemCategory,
+  MovementType,
+  NeedType,
   ShipmentStatus,
 } from "./types";
 
@@ -27,6 +29,18 @@ export const itemCategoryLabel: Record<ItemCategory, string> = {
   SANDANG: "Sandang",
   PAPAN: "Papan",
   LOGISTIK_LAINNYA: "Logistik lainnya",
+};
+
+export const needTypeLabel: Record<NeedType, string> = {
+  HARIAN: "Harian",
+  SATU_KALI: "Satu kali",
+};
+
+export const movementTypeLabel: Record<MovementType, string> = {
+  STOK_AWAL: "Stok awal",
+  PENERIMAAN: "Penerimaan",
+  PENGIRIMAN: "Pengiriman",
+  KOREKSI: "Koreksi",
 };
 
 export const fulfillmentLabel = {
