@@ -154,3 +154,10 @@ export async function listAll<T>(path: string, filter: Record<string, string> = 
     if (page >= meta.total_pages) return rows;
   }
 }
+
+/** One page of a list endpoint, for tables that page on the server. */
+export async function listPage<T>(path: string, page: number, filter: Record<string, string> = {}, limit = 20) {
+  const params = new URLSearchParams({ ...filter, page: String(Math.max(1, page)), limit: String(limit) });
+  const { data, meta } = await apiRequest<Page<T>>(`${path}?${params}`);
+  return { rows: data, page: meta.page, totalPages: Math.max(1, meta.total_pages), total: meta.total };
+}

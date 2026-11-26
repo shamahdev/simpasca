@@ -1,7 +1,8 @@
 "use client";
 
 import { Avatar, Button } from "@heroui/react";
-import { LogOut } from "lucide-react";
+import { LogOut, UserCog } from "lucide-react";
+import { LinkButton } from "@/components/ui/link-button";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { logout } from "@/app/login/actions";
@@ -58,7 +59,7 @@ const initials = (name: string) =>
     .join("");
 
 /** Account footer of the sidebar: who is signed in, and sign-out (UC-01). */
-export function SidebarAccount({ name }: { name: string }) {
+export function SidebarAccount({ name, canManageUsers }: { name: string; canManageUsers?: boolean }) {
   return (
     <>
       <div className="flex items-center gap-2">
@@ -67,6 +68,12 @@ export function SidebarAccount({ name }: { name: string }) {
         </Avatar>
         <span className="truncate text-sm font-semibold">{name}</span>
       </div>
+      {canManageUsers && (
+        <LinkButton href="/pengguna" variant="ghost" fullWidth>
+          <UserCog aria-hidden className="size-4" />
+          Kelola akun
+        </LinkButton>
+      )}
       <form action={logout}>
         <Button type="submit" variant="outline" fullWidth>
           <LogOut aria-hidden className="size-4" />

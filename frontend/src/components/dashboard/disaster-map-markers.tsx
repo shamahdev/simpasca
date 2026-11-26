@@ -52,10 +52,10 @@ export function DisasterMapPanel({
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-base font-semibold">Sebaran Bencana</h2>
         <Switch isSelected={showAll} onChange={setShowAll} size="sm">
-          <Switch.Control>
-            <Switch.Thumb />
-          </Switch.Control>
           <Switch.Content>
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
             <Label className="text-xs text-muted">
               Tampilkan bencana selesai
             </Label>

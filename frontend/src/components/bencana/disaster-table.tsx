@@ -9,7 +9,8 @@ import {
   Select,
   Table,
 } from "@heroui/react";
-import { Ellipsis, Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { Ellipsis, Eye, FileText, Pencil, Plus, Trash2 } from "lucide-react";
+import { useGenerateReport } from "@/components/laporan/report-buttons";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { removeDisaster } from "@/app/(app)/bencana/actions";
@@ -91,14 +92,23 @@ export function DisasterTable({ rows }: { rows: DisasterRow[] }) {
       (scale === ALL || r.handlingScale === scale),
   );
 
+  const report = useGenerateReport();
+
   const onAction = (row: DisasterRow, key: React.Key) => {
     if (key === "detail") return router.push(`/bencana/${row.id}`);
+    if (key === "report") return report.generate(row.id);
     setTarget(row);
     setOpenDialog(key === "edit" ? "edit" : "delete");
   };
 
   return (
     <section className="flex flex-col gap-4">
+      {report.isPending && <p className="text-sm text-muted">Membuat laporan…</p>}
+      {report.error && (
+        <p role="alert" className="text-sm text-danger">
+          {report.error}
+        </p>
+      )}
       <div className="flex flex-wrap items-end gap-4">
         <SearchField
           aria-label="Cari jenis atau wilayah"
@@ -162,6 +172,10 @@ export function DisasterTable({ rows }: { rows: DisasterRow[] }) {
                           <Dropdown.Item id="detail" textValue="Lihat detail">
                             <Eye aria-hidden className="size-4" />
                             <Label>Lihat detail</Label>
+                          </Dropdown.Item>
+                          <Dropdown.Item id="report" textValue="Generate laporan">
+                            <FileText aria-hidden className="size-4" />
+                            <Label>Generate laporan</Label>
                           </Dropdown.Item>
                           <Dropdown.Item id="edit" textValue="Ubah data">
                             <Pencil aria-hidden className="size-4" />

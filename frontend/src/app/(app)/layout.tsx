@@ -6,11 +6,11 @@ import {
   SidebarAccount,
 } from "@/components/layout/app-sidebar";
 import { LinkButton } from "@/components/ui/link-button";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isSuperadmin } from "@/lib/auth";
 import { hasPublicReadAccount } from "@/lib/data/api";
 import { redirectToLogin } from "@/lib/session";
 
-const sidebarClass = "sticky top-0 h-screen";
+const sidebarClass = "sticky top-0 h-screen print:hidden";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const user = await getCurrentUser();
@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   if (!user && !hasPublicReadAccount()) redirectToLogin();
 
   const account = user ? (
-    <SidebarAccount name={user.name} />
+    <SidebarAccount name={user.name} canManageUsers={isSuperadmin(user)} />
   ) : (
     <>
       <p className="text-xs text-muted">Data bantuan bencana terbuka untuk publik.</p>

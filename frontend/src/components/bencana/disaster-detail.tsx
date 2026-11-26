@@ -11,6 +11,7 @@ import type { ShipmentStatus } from "@/lib/types";
 import { DisasterDialog } from "./disaster-dialog";
 import { DeleteDisasterDialog, type DisasterRow } from "./disaster-table";
 import { useCanEdit } from "@/components/ui/editor-only";
+import { GenerateReportButton } from "@/components/laporan/report-buttons";
 
 /** Kembali / Ubah data / Hapus (design 03B). */
 export function DisasterDetailActions({ disaster }: { disaster: DisasterRow }) {
@@ -24,6 +25,7 @@ export function DisasterDetailActions({ disaster }: { disaster: DisasterRow }) {
         <ArrowLeft aria-hidden className="size-4" />
         Kembali
       </LinkButton>
+      <GenerateReportButton disasterId={disaster.id} />
       {canEdit && (
         <>
           <Button variant="outline" onPress={() => setOpenDialog("edit")}>

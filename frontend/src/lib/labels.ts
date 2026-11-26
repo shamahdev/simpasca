@@ -59,3 +59,18 @@ export const cashTypeNoun: Record<CashTransactionType, string> = {
   MASUK: "pemasukan",
   KELUAR: "pengeluaran",
 };
+
+export const auditActionLabel: Record<string, string> = {
+  UBAH: "Ubah",
+  HAPUS: "Hapus",
+  GENERATE_LAPORAN: "Generate laporan",
+};
+
+export const auditEntityLabel: Record<string, string> = {
+  disasters: "Bencana",
+  shipments: "Pengiriman",
+  cash_transactions: "Transaksi kas",
+  inventory_items: "Barang logistik",
+  stock_receipts: "Penerimaan barang",
+  users: "Akun pengguna",
+};
