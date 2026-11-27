@@ -27,6 +27,7 @@ import type { CashTransactionType } from "@/lib/types";
 import {
   CashTransactionDialog,
   type CashFormValues,
+  type CashLinkOptions,
 } from "./cash-transaction-dialog";
 import { DeleteCashTransactionDialog } from "./delete-cash-transaction-dialog";
 import { useCanEdit } from "@/components/ui/editor-only";
@@ -56,7 +57,7 @@ function hrefFor({ type, period, page }: CashFilters) {
   return query ? `/anggaran?${query}` : "/anggaran";
 }
 
-export function AddCashTransactionButton() {
+export function AddCashTransactionButton({ options }: { options: CashLinkOptions }) {
   const canEdit = useCanEdit();
   const [isOpen, setIsOpen] = useState(false);
   if (!canEdit) return null;
@@ -66,7 +67,7 @@ export function AddCashTransactionButton() {
         <Plus aria-hidden className="size-4" />
         Tambah transaksi
       </Button>
-      <CashTransactionDialog isOpen={isOpen} onOpenChange={setIsOpen} />
+      <CashTransactionDialog options={options} isOpen={isOpen} onOpenChange={setIsOpen} />
     </>
   );
 }
@@ -79,6 +80,7 @@ interface CashBookTableProps {
   total: number;
   totalPages: number;
   periodOptions: [string, string][];
+  options: CashLinkOptions;
 }
 
 /** Buku Bantu Kas list (design 05). Filters narrow the list only; totals stay global (finding T4). */
@@ -90,6 +92,7 @@ export function CashBookTable({
   total,
   totalPages,
   periodOptions,
+  options,
 }: CashBookTableProps) {
   const router = useRouter();
   const canEdit = useCanEdit();
@@ -253,6 +256,7 @@ export function CashBookTable({
         <>
           <CashTransactionDialog
             transaction={target}
+            options={options}
             isOpen={openDialog === "edit"}
             onOpenChange={(open) => setOpenDialog(open ? "edit" : undefined)}
           />

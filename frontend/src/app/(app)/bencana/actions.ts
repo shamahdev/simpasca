@@ -43,10 +43,10 @@ export async function saveDisaster(
   ) as unknown as DisasterInput;
 
   try {
-    const { id: userId } = await requireUser();
+    await requireUser();
     const saved = id
-      ? await updateDisaster(id, input, userId)
-      : await createDisaster(input, userId);
+      ? await updateDisaster(id, input)
+      : await createDisaster(input);
     revalidateDisaster(saved.id);
     return { status: "success", id: saved.id };
   } catch (error) {
@@ -57,7 +57,8 @@ export async function saveDisaster(
 /** Deletes a disaster; refused while shipments reference it (KF-03.1, AC-18). */
 export async function removeDisaster(id: string): Promise<ActionState> {
   try {
-    await deleteDisaster(id, (await requireUser()).id);
+    await requireUser();
+    await deleteDisaster(id);
     revalidateDisaster(id);
     return { status: "success", id };
   } catch (error) {

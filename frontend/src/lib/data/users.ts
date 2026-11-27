@@ -1,6 +1,5 @@
 import type { User, UserRole } from "../types.ts";
 import { deleteRow, getRow, listAll, patchJson, postJson } from "./api.ts";
-import { recordAudit } from "./audit.ts";
 import { DataError, invalidIfAny } from "./errors.ts";
 
 export const USER_ROLES: UserRole[] = ["PETUGAS", "SUPERADMIN"];
@@ -75,28 +74,25 @@ async function requireUserRow(id: string) {
   return row;
 }
 
-/** Updates an account; the password changes only when a new one is given. Audited without passwords (KF-09). */
+/** Updates an account; the password changes only when a new one is given. Audited by the API without passwords (KF-09). */
 export async function updateUser(id: string, input: UserInput, actor: User) {
   const data = validateUserInput(input, false);
   if (String(actor.id) === id && data.role !== "SUPERADMIN") {
     const message = "Anda tidak dapat menurunkan peran akun sendiri.";
     throw new DataError("INVALID", message, { role: message });
   }
-  const before = await requireUserRow(id);
-  let after: ApiUser;
+  await requireUserRow(id);
   try {
-    after = await patchJson<ApiUser>(`${PATH}/${id}`, data);
+    return fromApi(await patchJson<ApiUser>(`${PATH}/${id}`, data));
   } catch (error) {
     throw usernameTaken(error);
   }
-  await recordAudit({ userId: actor.id, action: "UBAH", entityType: "users", entityId: id, before, after });
-  return fromApi(after);
 }
 
 /** Deletes an account. The API refuses (409) once it is referenced by any record, so history keeps its author. */
 export async function deleteUser(id: string, actor: User) {
   if (String(actor.id) === id) throw new DataError("INVALID", "Anda tidak dapat menghapus akun sendiri.");
-  const before = await requireUserRow(id);
+  await requireUserRow(id);
   try {
     await deleteRow(`${PATH}/${id}`);
   } catch (error) {
@@ -108,5 +104,4 @@ export async function deleteUser(id: string, actor: User) {
     }
     throw error;
   }
-  await recordAudit({ userId: actor.id, action: "HAPUS", entityType: "users", entityId: id, before, after: null });
 }

@@ -1,7 +1,6 @@
 import { cache } from "react";
-import type { Disaster, InventoryItem, Shipment, ShipmentItem, ShipmentStatus } from "../types.ts";
+import type { Disaster, InventoryItem, Shipment, ShipmentStatus } from "../types.ts";
 import { deleteRow, getRow, listAll, patchJson, postJson } from "./api.ts";
-import { recordAudit } from "./audit.ts";
 import { getDisaster } from "./disasters.ts";
 import { DataError, invalidIfAny } from "./errors.ts";
 import {
@@ -99,11 +98,10 @@ export const listShipments = cache(async (): Promise<Shipment[]> => {
     .sort((a, b) => b.shippedAt.localeCompare(a.shippedAt) || Number(b.id) - Number(a.id));
 });
 
+/** The detail endpoint includes the shipment's live items. */
 async function loadShipment(id: string) {
-  const row = await getRow<ApiShipment>("/api/shipments", id);
-  if (!row) return undefined;
-  const items = await listAll<ApiShipmentItem>("/api/shipment-items", { shipment_id: id });
-  return { row, items, shipment: fromApi(row, items) };
+  const row = await getRow<ApiShipment & { items: ApiShipmentItem[] }>("/api/shipments", id);
+  return row && { row, shipment: fromApi(row, row.items ?? []) };
 }
 
 export async function getShipment(id: string): Promise<Shipment | undefined> {
@@ -264,84 +262,31 @@ async function loadContext(disasterId: string): Promise<ShipmentContext> {
 }
 
 // --- Writes ----------------------------------------------------------------
-// The API only stores rows; the stock movements that belong to shipment items
-// are written here (AB-02).
-// shortcut: a shipment spans several API calls without a transaction; creation rolls back on failure, an edit or delete failing halfway does not. Ask the backend for one atomic shipment endpoint (AB-03.2).
+// The API writes the shipment, its items, the PENGIRIMAN/KOREKSI stock movements
+// and the audit entry in one transaction (AB-03.2, KF-09). The checks below give
+// the form field-level errors first; the API checks again under a lock.
 
-interface WriteContext {
-  shipmentId: string;
-  code: string;
-  disasterId: string;
-  userId: number;
-}
+const linesToApi = (items: ShipmentData["items"]) =>
+  items.map(({ itemId, quantity }) => ({ item_id: Number(itemId), quantity }));
 
-/** delta > 0 takes stock out, delta < 0 puts it back. */
-function addMovement(
-  ctx: WriteContext,
-  item: ShipmentItem,
-  type: "PENGIRIMAN" | "KOREKSI",
-  delta: number,
-  date: string,
-) {
-  return postJson("/api/stock-movements", {
-    item_id: Number(item.itemId),
-    disaster_id: Number(ctx.disasterId),
-    shipment_item_id: Number(item.id),
-    movement_type: type,
-    quantity_in: String(Math.max(0, -delta)),
-    quantity_out: String(Math.max(0, delta)),
-    movement_date: date,
-    notes: type === "PENGIRIMAN" ? `Pengiriman ${ctx.code}` : `Koreksi pengiriman ${ctx.code}`,
-    created_by: ctx.userId,
-  });
-}
-
-/** Adds an item row and takes it out of stock. */
-async function shipItem(
-  ctx: WriteContext,
-  itemId: string,
-  quantity: number,
-  date: string,
-): Promise<ShipmentItem> {
-  const row = await postJson<ApiShipmentItem>("/api/shipment-items", {
-    shipment_id: Number(ctx.shipmentId),
-    item_id: Number(itemId),
-    quantity: String(quantity),
-  });
-  const item = { id: String(row.id), itemId, quantity };
-  await addMovement(ctx, item, "PENGIRIMAN", quantity, date);
-  return item;
-}
-
-/** Puts an item row back into stock and removes it (KF-09.3). */
-async function returnItem(ctx: WriteContext, item: ShipmentItem, today: string) {
-  await addMovement(ctx, item, "KOREKSI", -item.quantity, today);
-  await deleteRow(`/api/shipment-items/${item.id}`);
-}
+const withItems = (row: ApiShipment & { items?: ApiShipmentItem[] }) => fromApi(row, row.items ?? []);
 
 /** Records a shipment as DIKIRIM and takes its items out of stock (AB-03.1). A reused request key is refused (AB-03.4). */
-export async function createShipment(
-  input: ShipmentInput,
-  requestKey: string,
-  userId: number,
-): Promise<Shipment> {
+export async function createShipment(input: ShipmentInput, requestKey: string): Promise<Shipment> {
   const key = requestKey.trim();
   if (!key) throw new DataError("INVALID", "Permintaan tidak memiliki request key.");
-  const context = await loadContext(input.disasterId);
-  const data = validateShipment(input, context);
-
-  let row: ApiShipment;
+  const data = validateShipment(input, await loadContext(input.disasterId));
   try {
-    row = await postJson<ApiShipment>("/api/shipments", {
-      disaster_id: Number(data.disasterId),
-      status: "DIKIRIM",
-      shipped_at: toApiDateTime(data.shippedAt),
-      received_at: null,
-      destination: data.destination,
-      person_in_charge: data.personInCharge,
-      request_key: key,
-      created_by: userId,
-    });
+    return withItems(
+      await postJson<ApiShipment & { items: ApiShipmentItem[] }>("/api/shipments", {
+        disaster_id: Number(data.disasterId),
+        shipped_at: toApiDateTime(data.shippedAt),
+        destination: data.destination,
+        person_in_charge: data.personInCharge,
+        request_key: key,
+        items: linesToApi(data.items),
+      }),
+    );
   } catch (error) {
     if (error instanceof DataError && error.code === "CONFLICT") {
       throw new DataError(
@@ -351,81 +296,26 @@ export async function createShipment(
     }
     throw error;
   }
-
-  const shipment = fromApi(row, []);
-  const ctx: WriteContext = { shipmentId: shipment.id, code: shipment.code, disasterId: data.disasterId, userId };
-  try {
-    for (const { itemId, quantity } of data.items) {
-      shipment.items.push(await shipItem(ctx, itemId, quantity, data.shippedAt));
-    }
-  } catch (error) {
-    // All or nothing (AB-03.2): undo what was written, then report the original failure.
-    try {
-      for (const item of shipment.items) await returnItem(ctx, item, context.today);
-      await deleteRow(`/api/shipments/${row.id}`);
-    } catch (rollbackError) {
-      console.error("rollback pengiriman gagal", row.id, rollbackError);
-    }
-    throw error;
-  }
-  return shipment;
 }
 
-/** Corrects a shipment; differences go back to or out of stock as KOREKSI movements (KF-09.3). Audited (KF-09). */
-export async function updateShipment(
-  id: string,
-  input: ShipmentInput,
-  userId: number,
-): Promise<Shipment> {
+/** Corrects a shipment; the API returns differences to or takes them out of stock as KOREKSI (KF-09.3). */
+export async function updateShipment(id: string, input: ShipmentInput): Promise<Shipment> {
   const before = await requireShipment(id);
-  const context = await loadContext(input.disasterId);
-  const data = validateShipment(input, context, before.shipment);
-  const ctx: WriteContext = { shipmentId: id, code: before.shipment.code, disasterId: data.disasterId, userId };
-
-  const row = await patchJson<ApiShipment>(`/api/shipments/${id}`, {
-    disaster_id: Number(data.disasterId),
-    shipped_at: toApiDateTime(data.shippedAt),
-    destination: data.destination,
-    person_in_charge: data.personInCharge,
-  });
-
-  const items: ShipmentItem[] = [];
-  for (const old of before.shipment.items) {
-    const quantity = data.items.find((i) => i.itemId === old.itemId)?.quantity;
-    if (quantity === undefined) {
-      await returnItem(ctx, old, context.today);
-      continue;
-    }
-    if (quantity !== old.quantity) {
-      await patchJson(`/api/shipment-items/${old.id}`, { quantity: String(quantity) });
-      await addMovement(ctx, old, "KOREKSI", quantity - old.quantity, context.today);
-    }
-    items.push({ ...old, quantity });
-  }
-  for (const { itemId, quantity } of data.items) {
-    if (!before.shipment.items.some((i) => i.itemId === itemId)) {
-      items.push(await shipItem(ctx, itemId, quantity, data.shippedAt));
-    }
-  }
-
-  await recordAudit({
-    userId,
-    action: "UBAH",
-    entityType: "shipments",
-    entityId: id,
-    before: { ...before.row, items: before.items },
-    after: { ...row, items },
-  });
-  return { ...fromApi(row, []), items };
+  const data = validateShipment(input, await loadContext(input.disasterId), before.shipment);
+  return withItems(
+    await patchJson<ApiShipment & { items: ApiShipmentItem[] }>(`/api/shipments/${id}`, {
+      disaster_id: Number(data.disasterId),
+      shipped_at: toApiDateTime(data.shippedAt),
+      destination: data.destination,
+      person_in_charge: data.personInCharge,
+      items: linesToApi(data.items),
+    }),
+  );
 }
 
-/** DIKIRIM → DITERIMA. Stores the receipt date only; stock is not touched (AB-03.3, AC-10). Audited (KF-09). */
-export async function confirmShipmentReceived(
-  id: string,
-  receivedAt: string,
-  userId: number,
-): Promise<Shipment> {
-  const { row, shipment } = await requireShipment(id);
+/** DIKIRIM → DITERIMA. Stores the receipt date only; stock is not touched (AB-03.3, AC-10). */
+export async function confirmShipmentReceived(id: string, receivedAt: string): Promise<Shipment> {
+  const { shipment } = await requireShipment(id);
   if (shipment.status === "DITERIMA") {
     throw new DataError("CONFLICT", "Pengiriman ini sudah dikonfirmasi diterima.");
   }
@@ -437,28 +327,17 @@ export async function confirmShipmentReceived(
     const message = "Tanggal penerimaan harus antara tanggal pengiriman dan hari ini.";
     throw new DataError("INVALID", message, { receivedAt: message });
   }
-  const after = await patchJson<ApiShipment>(`/api/shipments/${id}`, {
-    status: "DITERIMA",
-    received_at: toApiDateTime(receivedAt),
-  });
-  await recordAudit({ userId, action: "UBAH", entityType: "shipments", entityId: id, before: row, after });
-  return { ...fromApi(after, []), items: shipment.items };
+  return withItems(
+    await patchJson<ApiShipment & { items: ApiShipmentItem[] }>(`/api/shipments/${id}`, {
+      status: "DITERIMA",
+      received_at: toApiDateTime(receivedAt),
+    }),
+  );
 }
 
-/** Soft delete; every item goes back into stock, so the disaster's shipped totals drop too (KF-09.3). Audited (KF-09). */
-export async function deleteShipment(id: string, userId: number): Promise<Shipment> {
-  const { row, items, shipment } = await requireShipment(id);
-  const ctx: WriteContext = { shipmentId: id, code: shipment.code, disasterId: shipment.disasterId, userId };
-  const today = todayInJakarta();
-  for (const item of shipment.items) await returnItem(ctx, item, today);
+/** Soft delete; the API puts every item back into stock, so the disaster's shipped totals drop too (KF-09.3). */
+export async function deleteShipment(id: string): Promise<Shipment> {
+  const { shipment } = await requireShipment(id);
   await deleteRow(`/api/shipments/${id}`);
-  await recordAudit({
-    userId,
-    action: "HAPUS",
-    entityType: "shipments",
-    entityId: id,
-    before: { ...row, items },
-    after: null,
-  });
   return shipment;
 }

@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { getCashSummary, listCashTransactions } from "@/lib/data/cash";
 import { formatRupiah } from "@/lib/format";
 import {
+  getCashLinkOptions,
   parseCashFilters,
   periodOptions,
   periodRange,
@@ -25,7 +26,9 @@ export const metadata: Metadata = {
 export default function AnggaranPage({ searchParams }: PageProps<"/anggaran">) {
   return (
     <>
-      <PageHeader title="Anggaran" actions={<AddCashTransactionButton />} />
+      <Suspense fallback={<PageHeader title="Anggaran" />}>
+        <CashHeader />
+      </Suspense>
       <Suspense
         fallback={
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -42,6 +45,10 @@ export default function AnggaranPage({ searchParams }: PageProps<"/anggaran">) {
       </Suspense>
     </>
   );
+}
+
+async function CashHeader() {
+  return <PageHeader title="Anggaran" actions={<AddCashTransactionButton options={await getCashLinkOptions()} />} />;
 }
 
 /** Totals over every transaction, independent of the list filters (finding T4). */
@@ -79,11 +86,10 @@ async function CashList({
   searchParams,
 }: Pick<PageProps<"/anggaran">, "searchParams">) {
   const filters = parseCashFilters(await searchParams);
-  const result = await listCashTransactions({
-    page: filters.page,
-    type: filters.type,
-    ...periodRange(filters.period),
-  });
+  const [result, options] = await Promise.all([
+    listCashTransactions({ page: filters.page, type: filters.type, ...periodRange(filters.period) }),
+    getCashLinkOptions(),
+  ]);
 
   return (
     <CashBookTable
@@ -94,6 +100,7 @@ async function CashList({
       total={result.total}
       totalPages={result.totalPages}
       periodOptions={periodOptions(12, filters.period)}
+      options={options}
     />
   );
 }

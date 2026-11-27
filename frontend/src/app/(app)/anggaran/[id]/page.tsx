@@ -1,5 +1,6 @@
 import { CardRoot, Skeleton } from "@heroui/react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import {
@@ -20,7 +21,10 @@ import {
 } from "@/lib/format";
 import { cashTypeNoun } from "@/lib/labels";
 import type { CashTransaction } from "@/lib/types";
-import { toCashRow } from "../cash-row";
+import { getDisaster } from "@/lib/data/disasters";
+import { getInventoryItem } from "@/lib/data/inventory";
+import { getReceipt } from "@/lib/data/receipts";
+import { disasterLabel, getCashLinkOptions, receiptLabel, toCashRow } from "../cash-row";
 
 export const metadata: Metadata = {
   title: "Detail transaksi kas",
@@ -79,18 +83,41 @@ async function CashDetail({
   const transaction = await getCashTransaction(id);
   if (!transaction) notFound();
 
-  const fields = [
+  const [disaster, receipt, options] = await Promise.all([
+    transaction.disasterId ? getDisaster(transaction.disasterId) : undefined,
+    transaction.receiptId ? getReceipt(transaction.receiptId) : undefined,
+    getCashLinkOptions(),
+  ]);
+  const receiptItem = receipt && (await getInventoryItem(receipt.itemId));
+  const linkClass = "text-accent underline-offset-2 hover:underline";
+  const fields: [string, React.ReactNode][] = [
     ["Tanggal transaksi", formatLongDate(transaction.transactionDate)],
     ["Petugas pencatat", await getUserName(transaction.createdBy)],
     ["Keterangan", transaction.description || "–"],
     ["Waktu pencatatan", formatDateTime(transaction.createdAt, ", ")],
+    [
+      "Untuk bencana",
+      disaster ? (
+        <Link href={`/bencana/${disaster.id}`} className={linkClass}>
+          {disasterLabel(disaster)}
+        </Link>
+      ) : transaction.disasterId ? "Bencana sudah dihapus" : "–",
+    ],
+    [
+      "Pembayaran penerimaan barang",
+      receipt ? (
+        <Link href={`/logistik/${receipt.itemId}`} className={linkClass}>
+          {receiptLabel(receipt, receiptItem)}
+        </Link>
+      ) : transaction.receiptId ? "Penerimaan sudah dihapus" : "–",
+    ],
   ];
 
   return (
     <>
       <div className="flex flex-col gap-4">
         <PageHeader title="Detail transaksi kas" />
-        <CashDetailActions transaction={toCashRow(transaction)} />
+        <CashDetailActions transaction={toCashRow(transaction)} options={options} />
       </div>
 
       <CardRoot>

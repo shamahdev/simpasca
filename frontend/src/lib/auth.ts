@@ -30,18 +30,16 @@ export async function requireUser(): Promise<User> {
   return (await getCurrentUser()) ?? redirectToLogin();
 }
 
-/** Display name for a `created_by` id. */
+/** Display name for a `created_by` id. Accounts are not public, so visitors see "Petugas". */
 export const getUserName = cache(async (id: number): Promise<string> => {
+  if (!(await getSessionToken())) return "Petugas";
   const user = await getRow<ApiUser>("/api/users", String(id));
   return user?.name ?? `Pengguna #${id}`;
 });
 
 export const isSuperadmin = (user: User | null) => user?.role === "SUPERADMIN";
 
-/**
- * For account management (KF-01.4, AC-02). The API has no role checks, so this
- * server-side gate is what keeps petugas out.
- */
+/** For account management (KF-01.4, AC-02). The API enforces it too (403); this gives a clear message first. */
 export async function requireSuperadmin(): Promise<User> {
   const user = await requireUser();
   if (!isSuperadmin(user)) {

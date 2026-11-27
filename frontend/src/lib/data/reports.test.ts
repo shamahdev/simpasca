@@ -55,23 +55,23 @@ test("AC-30: without shipments the report still builds, all needs Kurang, totals
   assert.match(reportText(s), /Belum ada pengiriman \(jumlah keluar 0\)/);
 });
 
-test("AC-32: generating writes the report and a GENERATE_LAPORAN audit, nothing else", async () => {
+test("AC-32: generating writes only the report; the API adds author and GENERATE_LAPORAN audit", async () => {
   const api = stubApi((call) => {
     const route = `${call.method} ${call.path}`;
     if (route === "GET /api/disasters/1") {
       return [200, { data: { id: 1, disaster_type: "Banjir", province: "Jawa Barat", regency_city: "Kab. Bandung", latitude: null, longitude: null, location_details: null, status: "AKTIF", handling_scale: "PROVINSI", occurred_at: "2026-11-16T01:30:00.000Z", affected_people: 10, affected_households: 2, impact_notes: null, created_by: 1 } }];
     }
     if (call.method === "GET") return [200, page([])];
-    if (route === "POST /api/generated-reports") return [201, { data: { id: 5, ...call.body } }];
+    if (route === "POST /api/generated-reports") return [201, { data: { id: 5, generated_by: 3, generated_by_name: "Rina", ...call.body } }];
     return [201, { data: { id: 1 } }];
   });
   restore = api.restore;
   const user = { id: 3, name: "Rina", username: "rina", role: "PETUGAS" } as User;
   const report = await generateReport("1", user);
   const writes = api.calls.filter((c) => c.method !== "GET");
-  assert.deepEqual(writes.map((c) => c.path), ["/api/generated-reports", "/api/audit-logs"]);
-  assert.deepEqual([writes[0].body.disaster_id, writes[0].body.generated_by, writes[0].body.generated_by_name], [1, 3, "Rina"]);
-  assert.deepEqual([writes[1].body.action, writes[1].body.entity_type, writes[1].body.entity_id, writes[1].body.after_data.report_id], ["GENERATE_LAPORAN", "disasters", 1, 5]);
+  assert.deepEqual(writes.map((c) => c.path), ["/api/generated-reports"]);
+  assert.deepEqual(Object.keys(writes[0].body).sort(), ["disaster_id", "report_snapshot"]);
+  assert.equal(writes[0].body.report_snapshot.generatedByName, "Rina");
   assert.equal(report.code, "LAP-0005");
 });
 

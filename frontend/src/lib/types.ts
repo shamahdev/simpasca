@@ -124,6 +124,10 @@ export interface CashTransaction {
   requestKey: string;
   /** User id (`created_by`). */
   createdBy: number;
+  /** The disaster the money is for, if any. */
+  disasterId: string | null;
+  /** The stock receipt an expense paid for, if any. */
+  receiptId: string | null;
   createdAt: string;
   updatedAt: string;
   /** Soft delete marker. */

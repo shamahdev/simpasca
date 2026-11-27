@@ -5,13 +5,13 @@ import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LinkButton } from "@/components/ui/link-button";
-import { CashTransactionDialog } from "./cash-transaction-dialog";
+import { CashTransactionDialog, type CashLinkOptions } from "./cash-transaction-dialog";
 import type { CashRow } from "./cash-book-table";
 import { DeleteCashTransactionDialog } from "./delete-cash-transaction-dialog";
 import { useCanEdit } from "@/components/ui/editor-only";
 
 /** Kembali / Ubah data / Hapus buttons on the detail page (design 05B). */
-export function CashDetailActions({ transaction }: { transaction: CashRow }) {
+export function CashDetailActions({ transaction, options }: { transaction: CashRow; options: CashLinkOptions }) {
   const router = useRouter();
   const canEdit = useCanEdit();
   const [openDialog, setOpenDialog] = useState<"edit" | "delete">();
@@ -37,6 +37,7 @@ export function CashDetailActions({ transaction }: { transaction: CashRow }) {
 
       <CashTransactionDialog
         transaction={transaction}
+        options={options}
         isOpen={openDialog === "edit"}
         onOpenChange={(open) => setOpenDialog(open ? "edit" : undefined)}
       />

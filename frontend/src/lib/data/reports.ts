@@ -1,7 +1,6 @@
 import { itemCategoryLabel, shipmentStatusLabel } from "../labels.ts";
 import type { Disaster, InventoryItem, ItemCategory, Shipment, ShipmentStatus, User } from "../types.ts";
 import { getRow, listPage, postJson } from "./api.ts";
-import { recordAudit } from "./audit.ts";
 import { getDisaster } from "./disasters.ts";
 import { DataError } from "./errors.ts";
 import { getStockLevels, listInventoryItems } from "./inventory.ts";
@@ -204,8 +203,8 @@ export async function getReport(id: string): Promise<Report | undefined> {
 }
 
 /**
- * Generate Laporan (KF-10, AB-05): saves a snapshot of one disaster and writes
- * GENERATE_LAPORAN to the audit log. Reads only; stock, cash and shipments stay as they are (AC-32).
+ * Generate Laporan (KF-10, AB-05): saves a snapshot of one disaster; the API takes the
+ * author from the session and writes GENERATE_LAPORAN to the audit log. Reads only; stock, cash and shipments stay as they are (AC-32).
  */
 export async function generateReport(disasterId: string, user: User): Promise<Report> {
   const disaster = await getDisaster(disasterId);
@@ -216,16 +215,6 @@ export async function generateReport(disasterId: string, user: User): Promise<Re
   const row = await postJson<ApiReport>(PATH, {
     disaster_id: Number(disaster.id),
     report_snapshot: snapshot,
-    generated_by: user.id,
-    generated_by_name: user.name,
-  });
-  await recordAudit({
-    userId: user.id,
-    action: "GENERATE_LAPORAN",
-    entityType: "disasters",
-    entityId: disaster.id,
-    before: null,
-    after: { report_id: row.id, disaster_id: Number(disaster.id), code: disaster.code, disaster_type: disaster.disasterType, regency_city: disaster.regencyCity },
   });
   return fromApi(row);
 }

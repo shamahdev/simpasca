@@ -102,14 +102,9 @@ try {
       ...item,
       initial_stock: String(initial_stock),
       need_ratio: item.need_ratio === null ? null : String(item.need_ratio),
-      created_by: me.id,
     });
+    // The API records the opening stock as STOK_AWAL itself (AB-02).
     itemIds[item.name] = created.id;
-    // Stock is the sum of movements (AB-02), so the opening stock needs its own STOK_AWAL movement.
-    await api("POST", "/api/stock-movements", {
-      item_id: created.id, movement_type: "STOK_AWAL", quantity_in: String(initial_stock), quantity_out: "0",
-      movement_date: "2026-06-01", notes: "Stok awal", created_by: me.id,
-    });
     console.log(`+ barang: ${item.name} (${initial_stock} ${item.stock_unit})`);
   }
 
@@ -127,7 +122,7 @@ try {
       console.log(`  bencana ada: ${disaster.disaster_type} ${disaster.regency_city}`);
       continue;
     }
-    disasterIds[key] = (await api("POST", "/api/disasters", { ...disaster, created_by: me.id })).id;
+    disasterIds[key] = (await api("POST", "/api/disasters", disaster)).id;
     console.log(`+ bencana: ${disaster.disaster_type} ${disaster.regency_city}`);
   }
 
@@ -144,15 +139,14 @@ try {
     }
     let shipment;
     try {
+      // One request: the API writes the items and their PENGIRIMAN movements (AB-03.1).
       shipment = await api("POST", "/api/shipments", {
         disaster_id: disasterIds[s.disaster],
-        status: s.received ? "DITERIMA" : "DIKIRIM",
         shipped_at: atWib(s.shipped),
-        received_at: s.received && atWib(s.received),
         destination: s.destination,
         person_in_charge: s.person_in_charge,
         request_key: s.request_key,
-        created_by: me.id,
+        items: Object.entries(s.items).map(([name, quantity]) => ({ item_id: itemIds[name], quantity })),
       });
     } catch (error) {
       if (error.status === 409) {
@@ -161,23 +155,17 @@ try {
       }
       throw error;
     }
-    for (const [name, quantity] of Object.entries(s.items)) {
-      const row = await api("POST", "/api/shipment-items", {
-        shipment_id: shipment.id, item_id: itemIds[name], quantity: String(quantity),
-      });
-      await api("POST", "/api/stock-movements", {
-        item_id: itemIds[name], disaster_id: disasterIds[s.disaster], shipment_item_id: row.id,
-        movement_type: "PENGIRIMAN", quantity_in: "0", quantity_out: String(quantity),
-        movement_date: s.shipped, notes: `Pengiriman DST-${String(shipment.id).padStart(4, "0")}`, created_by: me.id,
-      });
-      stock[itemIds[name]] -= quantity;
+    for (const [name, quantity] of Object.entries(s.items)) stock[itemIds[name]] -= quantity;
+    // A new shipment is always DIKIRIM; receipt is confirmed separately (AB-03.3).
+    if (s.received) {
+      await api("PATCH", `/api/shipments/${shipment.id}`, { status: "DITERIMA", received_at: atWib(s.received) });
     }
     console.log(`+ pengiriman: ${s.destination} (${Object.keys(s.items).length} barang)`);
   }
 
   for (const t of cash) {
     try {
-      await api("POST", "/api/cash-transactions", { ...t, created_by: me.id });
+      await api("POST", "/api/cash-transactions", t);
       console.log(`+ kas: ${t.description}`);
     } catch (error) {
       if (error.status !== 409) throw error;

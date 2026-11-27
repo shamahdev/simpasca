@@ -29,15 +29,26 @@ import { cashTypeLabel } from "@/lib/labels";
 import { todayIsoDate } from "@/lib/format";
 import type { CashTransaction, CashTransactionType } from "@/lib/types";
 import { submitAction } from "@/lib/submit-action";
+import { OptionSelect } from "@/components/ui/option-select";
 
 export type CashFormValues = Pick<
   CashTransaction,
-  "id" | "type" | "amount" | "description" | "transactionDate"
+  "id" | "type" | "amount" | "description" | "transactionDate" | "disasterId" | "receiptId"
 >;
+
+/** Choices for the optional links, as [id, label]; loaded on the server. */
+export interface CashLinkOptions {
+  disasters: [string, string][];
+  receipts: [string, string][];
+}
+
+/** Select key for "no link"; the server reads it as null. */
+const NONE = "none";
 
 interface CashTransactionDialogProps {
   /** Omit to create a new transaction. */
   transaction?: CashFormValues;
+  options: CashLinkOptions;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
 }
@@ -45,6 +56,7 @@ interface CashTransactionDialogProps {
 /** Tambah / Ubah transaksi kas dialog (design 05C / 05D). */
 export function CashTransactionDialog({
   transaction,
+  options,
   isOpen,
   onOpenChange,
 }: CashTransactionDialogProps) {
@@ -67,6 +79,7 @@ export function CashTransactionDialog({
           {isOpen && (
             <CashTransactionForm
               transaction={transaction}
+              options={options}
               onSaved={() => onOpenChange(false)}
             />
           )}
@@ -78,9 +91,11 @@ export function CashTransactionDialog({
 
 function CashTransactionForm({
   transaction,
+  options,
   onSaved,
 }: {
   transaction?: CashFormValues;
+  options: CashLinkOptions;
   onSaved: () => void;
 }) {
   // One key per opened form: double clicks and resubmits reuse it (AB-03.4).
@@ -178,6 +193,25 @@ function CashTransactionForm({
             <Description>Maks. 1000 karakter.</Description>
             <FieldError />
           </TextField>
+
+          <h3 className="text-sm leading-6 font-medium">Keterkaitan (opsional)</h3>
+          <OptionSelect
+            name="disasterId"
+            label="Untuk bencana"
+            placeholder="Tidak terkait bencana"
+            isRequired={false}
+            options={[[NONE, "Tidak terkait bencana"], ...options.disasters]}
+            defaultValue={transaction?.disasterId ?? undefined}
+          />
+          <OptionSelect
+            name="receiptId"
+            label="Pembayaran penerimaan barang"
+            placeholder="Tidak terkait penerimaan barang"
+            isRequired={false}
+            options={[[NONE, "Tidak terkait penerimaan barang"], ...options.receipts]}
+            defaultValue={transaction?.receiptId ?? undefined}
+          />
+          <p className="text-xs text-muted">Penerimaan barang hanya untuk transaksi keluar, misalnya pembelian logistik.</p>
         </Modal.Body>
 
         <Modal.Footer>

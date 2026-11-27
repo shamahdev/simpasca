@@ -48,11 +48,11 @@ export async function saveShipment(
   };
 
   try {
-    const { id: userId } = await requireUser();
+    await requireUser();
     const before = id ? await getShipment(id) : undefined;
     const saved = id
-      ? await updateShipment(id, input, userId)
-      : await createShipment(input, field(formData, "requestKey"), userId);
+      ? await updateShipment(id, input)
+      : await createShipment(input, field(formData, "requestKey"));
     revalidateShipment(saved.id, saved.disasterId);
     if (before && before.disasterId !== saved.disasterId) {
       revalidatePath(`/bencana/${before.disasterId}`);
@@ -69,11 +69,8 @@ export async function confirmReceipt(
   formData: FormData,
 ): Promise<ActionState> {
   try {
-    const saved = await confirmShipmentReceived(
-      field(formData, "id"),
-      field(formData, "receivedAt"),
-      (await requireUser()).id,
-    );
+    await requireUser();
+    const saved = await confirmShipmentReceived(field(formData, "id"), field(formData, "receivedAt"));
     revalidateShipment(saved.id, saved.disasterId);
     return { status: "success", id: saved.id };
   } catch (error) {
@@ -84,7 +81,8 @@ export async function confirmReceipt(
 /** Soft-deletes a shipment; stock and shipped totals follow (KF-09.3). */
 export async function removeShipment(id: string): Promise<ActionState> {
   try {
-    const shipment = await deleteShipment(id, (await requireUser()).id);
+    await requireUser();
+    const shipment = await deleteShipment(id);
     revalidateShipment(id, shipment.disasterId);
     return { status: "success", id };
   } catch (error) {

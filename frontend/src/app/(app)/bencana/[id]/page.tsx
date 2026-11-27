@@ -1,6 +1,7 @@
 import { CardRoot, Skeleton } from "@heroui/react";
 import { Activity, Users } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import {
@@ -9,11 +10,14 @@ import {
   RelatedShipmentsTable,
 } from "@/components/bencana/disaster-detail";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { CashTypeChip } from "@/components/ui/status-chips";
+import { SimpleTable } from "@/components/ui/simple-table";
+import { getCashSummary, listCashTransactions } from "@/lib/data/cash";
 import { PageHeader } from "@/components/layout/page-header";
 import { getDisaster } from "@/lib/data/disasters";
 import { PLANNING_DAYS } from "@/lib/data/inventory";
 import { getFulfillment, listShipments } from "@/lib/data/shipments";
-import { formatDateTime, formatNumber, formatShortDate } from "@/lib/format";
+import { formatDateTime, formatNumber, formatRupiah, formatShortDate } from "@/lib/format";
 import { handlingScaleLabel, handlingStatusLabel } from "@/lib/labels";
 import { disasterName, toDisasterRow } from "../disaster-view";
 
@@ -39,7 +43,12 @@ async function DisasterDetail({ params }: Pick<PageProps<"/bencana/[id]">, "para
   const disaster = await getDisaster(id);
   if (!disaster) notFound();
 
-  const [fulfillmentRows, shipments] = await Promise.all([getFulfillment(disaster), listShipments()]);
+  const [fulfillmentRows, shipments, cash, cashSummary] = await Promise.all([
+    getFulfillment(disaster),
+    listShipments(),
+    listCashTransactions({ disasterId: disaster.id, limit: 100 }),
+    getCashSummary(disaster.id),
+  ]);
   const fulfillment = fulfillmentRows.map(({ item, recommended, shipped, remaining, stock, status }) => ({
     id: item.id,
     basis:
@@ -127,6 +136,35 @@ async function DisasterDetail({ params }: Pick<PageProps<"/bencana/[id]">, "para
       <section className="flex flex-col gap-2">
         <h2 className="text-base font-semibold">Pengiriman terkait</h2>
         <RelatedShipmentsTable rows={related} />
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-base font-semibold">Anggaran terkait</h2>
+        <p className="text-sm text-muted">
+          Pemasukan {formatRupiah(cashSummary.totalIncome)} · Pengeluaran {formatRupiah(cashSummary.totalExpense)} · Selisih{" "}
+          {formatRupiah(cashSummary.balance)}
+        </p>
+        <SimpleTable
+          label="Transaksi kas untuk bencana ini"
+          columns={[{ label: "Tanggal" }, { label: "Jenis" }, { label: "Keterangan" }, { label: "Nominal", className: "text-right" }]}
+          rows={cash.rows.map((t) => ({
+            id: t.id,
+            cells: [
+              formatShortDate(t.transactionDate),
+              <CashTypeChip key="type" type={t.type} />,
+              <Link key="desc" href={`/anggaran/${t.id}`} className="text-accent underline-offset-2 hover:underline">
+                {t.description || "Transaksi kas"}
+              </Link>,
+              formatRupiah(t.amount),
+            ],
+          }))}
+          empty="Belum ada transaksi kas yang ditautkan ke bencana ini."
+          footer={
+            cash.total > cash.rows.length ? (
+              <p className="text-xs text-muted">Menampilkan {cash.rows.length} dari {cash.total} transaksi terbaru.</p>
+            ) : undefined
+          }
+        />
       </section>
     </>
   );

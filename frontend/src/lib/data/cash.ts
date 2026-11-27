@@ -1,6 +1,5 @@
 import type { CashTransaction, CashTransactionType } from "../types.ts";
 import { apiRequest, deleteRow, getRow, patchJson, postJson, type Page } from "./api.ts";
-import { recordAudit } from "./audit.ts";
 import { DataError } from "./errors.ts";
 
 /** API limit: 13 integer digits, 2 decimals (UC-12 finding T2). */
@@ -14,10 +13,18 @@ export interface CashInput {
   amount: string;
   description: string;
   transactionDate: string;
+  /** Linked disaster id; empty or "none" for no link. */
+  disasterId?: string;
+  /** Linked stock receipt id (expense only); empty or "none" for no link. */
+  receiptId?: string;
 }
 
 export type CashField = keyof CashInput;
 export type CashFieldErrors = Partial<Record<CashField, string>>;
+
+/** Form value of an optional link -> API id, null for none, NaN when malformed. */
+const linkId = (value?: string) =>
+  !value || value === "none" ? null : /^\d{1,10}$/.test(value) ? Number(value) : NaN;
 
 const isValidDate = (value: string) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -48,6 +55,14 @@ export function validateCashInput(input: CashInput) {
   if (!isValidDate(input.transactionDate)) {
     errors.transactionDate = "Tanggal transaksi tidak valid.";
   }
+  const disasterId = linkId(input.disasterId);
+  const receiptId = linkId(input.receiptId);
+  if (Number.isNaN(disasterId)) errors.disasterId = "Pilih bencana dari daftar.";
+  if (Number.isNaN(receiptId)) {
+    errors.receiptId = "Pilih penerimaan barang dari daftar.";
+  } else if (receiptId !== null && input.type !== "KELUAR") {
+    errors.receiptId = "Penerimaan barang hanya dapat ditautkan ke transaksi keluar.";
+  }
 
   if (Object.keys(errors).length > 0) {
     throw new DataError("INVALID", "Periksa kembali isian transaksi.", errors);
@@ -57,6 +72,8 @@ export function validateCashInput(input: CashInput) {
     amount: amount.toFixed(2),
     description,
     transaction_date: input.transactionDate,
+    disaster_id: disasterId,
+    receipt_id: receiptId,
   };
 }
 
@@ -72,6 +89,8 @@ export interface ApiCashTransaction {
   transaction_date: string;
   request_key: string;
   created_by: number;
+  disaster_id: number | null;
+  receipt_id: number | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -95,6 +114,8 @@ export function fromApi(t: ApiCashTransaction): CashTransaction {
     transactionDate: t.transaction_date,
     requestKey: t.request_key,
     createdBy: t.created_by,
+    disasterId: t.disaster_id == null ? null : String(t.disaster_id),
+    receiptId: t.receipt_id == null ? null : String(t.receipt_id),
     createdAt: t.created_at,
     updatedAt: t.updated_at,
     deletedAt: t.deleted_at,
@@ -110,6 +131,7 @@ export interface CashListFilter {
   /** YYYY-MM-DD, inclusive. */
   dateFrom?: string;
   dateTo?: string;
+  disasterId?: string;
 }
 
 /** GET /api/cash-transactions: live rows, newest date first (finding T4). */
@@ -121,6 +143,7 @@ export async function listCashTransactions(filter: CashListFilter = {}) {
   if (filter.type) params.set("type", toApiType[filter.type]);
   if (filter.dateFrom) params.set("date_from", filter.dateFrom);
   if (filter.dateTo) params.set("date_to", filter.dateTo);
+  if (filter.disasterId) params.set("disaster_id", filter.disasterId);
 
   const { data, meta } = await apiRequest<Page<ApiCashTransaction>>(
     `/api/cash-transactions?${params}`,
@@ -134,8 +157,9 @@ export async function listCashTransactions(filter: CashListFilter = {}) {
   };
 }
 
-/** GET /api/cash-transactions/summary without filters: totals over every live row (AB-04.1, finding T1). */
-export async function getCashSummary() {
+/** GET /api/cash-transactions/summary: totals over every live row (AB-04.1, finding T1), or one disaster's. */
+export async function getCashSummary(disasterId?: string) {
+  const query = disasterId ? `?${new URLSearchParams({ disaster_id: disasterId })}` : "";
   const { data } = await apiRequest<{
     data: {
       total_transactions: number;
@@ -143,7 +167,7 @@ export async function getCashSummary() {
       total_expense: string;
       balance: string;
     };
-  }>("/api/cash-transactions/summary");
+  }>(`/api/cash-transactions/summary${query}`);
   return {
     totalTransactions: data.total_transactions,
     totalIncome: Number(data.total_income),
@@ -167,7 +191,6 @@ export async function getCashTransaction(
 export async function createCashTransaction(
   input: CashInput,
   requestKey: string,
-  userId: number,
 ): Promise<CashTransaction> {
   const { type, ...data } = validateCashInput(input);
   try {
@@ -175,7 +198,6 @@ export async function createCashTransaction(
       ...data,
       type: toApiType[type],
       request_key: requestKey,
-      created_by: userId,
     });
     return fromApi(created);
   } catch (error) {
@@ -189,27 +211,19 @@ export async function createCashTransaction(
   }
 }
 
-/** PATCH /api/cash-transactions/{id}: every attribute, including the type (finding T3). Audited (KF-09). */
-export async function updateCashTransaction(
-  id: string,
-  input: CashInput,
-  userId: number,
-): Promise<CashTransaction> {
+/** PATCH /api/cash-transactions/{id}: every attribute, including the type and links (finding T3). Audited by the API (KF-09). */
+export async function updateCashTransaction(id: string, input: CashInput): Promise<CashTransaction> {
   const { type, ...data } = validateCashInput(input);
-  const before = await requireCash(id);
-  const updated = await patchJson<ApiCashTransaction>(`/api/cash-transactions/${id}`, {
-    ...data,
-    type: toApiType[type],
-  });
-  await recordAudit({ userId, action: "UBAH", entityType: "cash_transactions", entityId: id, before, after: updated });
-  return fromApi(updated);
+  await requireCash(id);
+  return fromApi(
+    await patchJson<ApiCashTransaction>(`/api/cash-transactions/${id}`, { ...data, type: toApiType[type] }),
+  );
 }
 
-/** DELETE /api/cash-transactions/{id}: soft delete (UC-12 A5). Audited (KF-09). */
-export async function deleteCashTransaction(id: string, userId: number): Promise<void> {
-  const before = await requireCash(id);
+/** DELETE /api/cash-transactions/{id}: soft delete (UC-12 A5). Audited by the API (KF-09). */
+export async function deleteCashTransaction(id: string): Promise<void> {
+  await requireCash(id);
   await deleteRow(`/api/cash-transactions/${id}`);
-  await recordAudit({ userId, action: "HAPUS", entityType: "cash_transactions", entityId: id, before, after: null });
 }
 
 async function requireCash(id: string) {

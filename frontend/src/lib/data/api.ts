@@ -19,84 +19,25 @@ const codeFor = (status: number): DataError["code"] =>
         ? "UNAVAILABLE"
         : "INVALID";
 
-// shortcut: the API has no public read endpoints, so visitors read through one server-side account (SIMPASCA_PUBLIC_USERNAME / SIMPASCA_PUBLIC_PASSWORD); replace with public read-only endpoints when the backend adds them.
-
-/** True when a visitor can read: the public account is configured on this deployment. */
-export const hasPublicReadAccount = () =>
-  Boolean(process.env.SIMPASCA_PUBLIC_USERNAME && process.env.SIMPASCA_PUBLIC_PASSWORD);
-
-/** How long a failed public sign-in is remembered before it is tried again. */
-const PUBLIC_RETRY_MS = 30_000;
-let publicToken: Promise<{ token: string; expiresAt: number }> | undefined;
-let publicFailure: { error: unknown; until: number } | undefined;
-
-/** How long a public token stays cached: the API's `expires_in`, renewed a minute early. */
-export function publicTokenLeaseSeconds(expiresIn: unknown): number {
-  const lifetime = Number(expiresIn);
-  const renewIn = Number.isFinite(lifetime) && lifetime > 0 ? lifetime - 60 : 3540;
-  return Math.max(renewIn, 30);
-}
-
-/** Signs the public account in; the token lifetime decides when to sign in again. */
-async function loginPublic(): Promise<{ token: string; expiresAt: number }> {
-  const username = process.env.SIMPASCA_PUBLIC_USERNAME;
-  const password = process.env.SIMPASCA_PUBLIC_PASSWORD;
-  if (!username || !password) {
-    throw new DataError("UNAVAILABLE", "Akses publik belum dikonfigurasi. Masuk untuk melihat data.");
-  }
-  const { data } = await apiRequest<{ data: { access_token: string; expires_in: number } }>(
-    "/api/auth/login",
-    { method: "POST", body: JSON.stringify({ username, password }), anonymous: true },
-  );
-  return {
-    token: data.access_token,
-    expiresAt: Date.now() + publicTokenLeaseSeconds(data.expires_in) * 1000,
-  };
-}
-
-/**
- * Read token for visitors without a session (transparency view). Cached until
- * shortly before it expires. A failed sign-in is remembered for a short while,
- * so one bad credential does not become a login attempt per data call.
- */
-async function getPublicToken(): Promise<string> {
-  if (publicFailure && publicFailure.until > Date.now()) throw publicFailure.error;
-  publicFailure = undefined;
-
-  const cached = publicToken && (await publicToken.catch(() => undefined));
-  if (cached && cached.expiresAt > Date.now()) return cached.token;
-
-  publicToken = loginPublic();
-  try {
-    return (await publicToken).token;
-  } catch (error) {
-    publicToken = undefined;
-    publicFailure = { error, until: Date.now() + PUBLIC_RETRY_MS };
-    throw error;
-  }
-}
-
 /**
  * Calls the API. A signed-in user calls it with their own token; a visitor
- * without a session may only read (GET), through the public account. Writing
- * without a session, or a rejected (expired or revoked) session token, sends
- * the user to /login. Errors arrive as `{ message }` in Indonesian and become a DataError.
+ * without a session may only read (GET), without a token: the API opens reads
+ * to the public for transparency, except accounts. Writing without a session,
+ * or a rejected (expired or revoked) session token, sends the user to /login.
+ * Errors arrive as `{ message }` in Indonesian and become a DataError.
  */
 export async function apiRequest<T>(
   path: string,
-  init: RequestInit & { anonymous?: boolean; retried?: boolean } = {},
+  init: RequestInit & { anonymous?: boolean } = {},
 ): Promise<T> {
-  const { anonymous, retried, ...rest } = init;
+  const { anonymous, ...rest } = init;
   const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/json",
   };
   const session = anonymous ? undefined : await getSessionToken();
-  if (!anonymous) {
-    const isRead = (rest.method ?? "GET") === "GET";
-    if (!session && !isRead) redirectToLogin();
-    headers.Authorization = `Bearer ${session ?? (await getPublicToken())}`;
-  }
+  if (!anonymous && !session && (rest.method ?? "GET") !== "GET") redirectToLogin();
+  if (session) headers.Authorization = `Bearer ${session}`;
 
   let response: Response;
   try {
@@ -104,12 +45,7 @@ export async function apiRequest<T>(
   } catch {
     throw new DataError("UNAVAILABLE", "Server API tidak dapat dihubungi.");
   }
-  if (response.status === 401 && !anonymous) {
-    if (session) redirectToLogin();
-    // The public token was revoked early: log in again once.
-    publicToken = undefined;
-    if (!retried) return apiRequest<T>(path, { ...init, retried: true });
-  }
+  if (response.status === 401 && session) redirectToLogin();
   if (response.status === 204) return undefined as T;
 
   const body = await response.json().catch(() => null);

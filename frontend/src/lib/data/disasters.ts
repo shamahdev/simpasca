@@ -3,7 +3,6 @@ import { findRegency, regions } from "../regions.ts";
 import type { Disaster, HandlingScale, HandlingStatus } from "../types.ts";
 import { cache } from "react";
 import { deleteRow, getRow, listAll, patchJson, postJson } from "./api.ts";
-import { recordAudit } from "./audit.ts";
 import { DataError, invalidIfAny } from "./errors.ts";
 
 /** Raw form values (all strings). */
@@ -190,30 +189,19 @@ async function requireDisaster(id: string) {
   return row;
 }
 
-export async function createDisaster(input: DisasterInput, userId: number): Promise<Disaster> {
-  const data = validateDisasterInput(input);
-  return fromApi(await postJson<ApiDisaster>(PATH, { ...toApi(data), created_by: userId }));
+export async function createDisaster(input: DisasterInput): Promise<Disaster> {
+  return fromApi(await postJson<ApiDisaster>(PATH, toApi(validateDisasterInput(input))));
 }
 
-/** Updates a disaster; recommendations follow because they are computed on read (KF-05.2). Audited (KF-09). */
-export async function updateDisaster(id: string, input: DisasterInput, userId: number): Promise<Disaster> {
+/** Updates a disaster; recommendations follow because they are computed on read (KF-05.2). Audited by the API (KF-09). */
+export async function updateDisaster(id: string, input: DisasterInput): Promise<Disaster> {
   const data = validateDisasterInput(input);
-  const before = await requireDisaster(id);
-  const after = await patchJson<ApiDisaster>(`${PATH}/${id}`, toApi(data));
-  await recordAudit({ userId, action: "UBAH", entityType: "disasters", entityId: id, before, after });
-  return fromApi(after);
+  await requireDisaster(id);
+  return fromApi(await patchJson<ApiDisaster>(`${PATH}/${id}`, toApi(data)));
 }
 
-/** The API refuses (409) while shipments still reference the disaster, so they stay traceable (AC-18). Audited (KF-09). */
-export async function deleteDisaster(id: string, userId: number): Promise<void> {
-  const before = await requireDisaster(id);
-  try {
-    await deleteRow(`${PATH}/${id}`);
-  } catch (error) {
-    if (error instanceof DataError && error.code === "CONFLICT") {
-      throw new DataError("CONFLICT", "Bencana ini masih memiliki data pengiriman, sehingga tidak dapat dihapus.");
-    }
-    throw error;
-  }
-  await recordAudit({ userId, action: "HAPUS", entityType: "disasters", entityId: id, before, after: null });
+/** Soft delete: shipments, cash and reports keep pointing at it (AC-18). Audited by the API (KF-09). */
+export async function deleteDisaster(id: string): Promise<void> {
+  await requireDisaster(id);
+  await deleteRow(`${PATH}/${id}`);
 }

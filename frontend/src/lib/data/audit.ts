@@ -1,5 +1,6 @@
-import { listAll, listPage, postJson, getRow } from "./api.ts";
+import { getRow, listAll, listPage } from "./api.ts";
 
+/** Audit entries are written by the API in the same transaction as the change (KF-09.1). */
 export type AuditAction = "UBAH" | "HAPUS" | "GENERATE_LAPORAN";
 export type AuditEntityType =
   | "disasters"
@@ -8,33 +9,6 @@ export type AuditEntityType =
   | "inventory_items"
   | "stock_receipts"
   | "users";
-
-/**
- * Records a change in audit_logs (KF-09.1). The API does not audit on its own,
- * so every update, delete and report generation calls this after it succeeded.
- * A failed audit write is logged instead of failing a change that already happened.
- */
-export async function recordAudit(entry: {
-  userId: number;
-  action: AuditAction;
-  entityType: AuditEntityType;
-  entityId: string;
-  before: object | null;
-  after: object | null;
-}) {
-  try {
-    await postJson("/api/audit-logs", {
-      user_id: entry.userId,
-      action: entry.action,
-      entity_type: entry.entityType,
-      entity_id: Number(entry.entityId),
-      before_data: entry.before,
-      after_data: entry.after,
-    });
-  } catch (error) {
-    console.error("audit log gagal dicatat", entry.entityType, entry.entityId, error);
-  }
-}
 
 export interface AuditEntry {
   id: number;

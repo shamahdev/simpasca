@@ -7,17 +7,11 @@ import {
 } from "@/components/layout/app-sidebar";
 import { LinkButton } from "@/components/ui/link-button";
 import { getCurrentUser, isSuperadmin } from "@/lib/auth";
-import { hasPublicReadAccount } from "@/lib/data/api";
-import { redirectToLogin } from "@/lib/session";
 
 const sidebarClass = "sticky top-0 h-screen print:hidden";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const user = await getCurrentUser();
-  // Without a public account a visitor can read nothing, so keep the old gate
-  // instead of rendering pages whose every table fails.
-  if (!user && !hasPublicReadAccount()) redirectToLogin();
-
   const account = user ? (
     <SidebarAccount name={user.name} canManageUsers={isSuperadmin(user)} />
   ) : (

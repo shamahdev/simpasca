@@ -1,13 +1,12 @@
+import { cache } from "react";
 import { ITEM_CONDITIONS } from "../options.ts";
 import type { InventoryItem, StockReceipt } from "../types.ts";
 import { deleteRow, getRow, listAll, patchJson, postJson } from "./api.ts";
-import { recordAudit } from "./audit.ts";
 import { DataError, invalidIfAny } from "./errors.ts";
 import {
   getInventoryItem,
   getItemStock,
   isValidDate,
-  postMovement,
   todayInJakarta,
 } from "./inventory.ts";
 
@@ -82,9 +81,20 @@ export function validateReceipt(input: ReceiptInput, item: InventoryItem | undef
 
 const PATH = "/api/stock-receipts";
 
+/** Every live receipt, newest first. Once per request. */
+export const listAllReceipts = cache(async (): Promise<StockReceipt[]> => {
+  const rows = await listAll<ApiStockReceipt>(PATH);
+  return rows.map(fromApi).sort((a, b) => b.receiptDate.localeCompare(a.receiptDate) || Number(b.id) - Number(a.id));
+});
+
 export async function listReceipts(itemId: string): Promise<StockReceipt[]> {
   const rows = await listAll<ApiStockReceipt>(PATH, { item_id: itemId });
   return rows.map(fromApi).sort((a, b) => b.receiptDate.localeCompare(a.receiptDate) || Number(b.id) - Number(a.id));
+}
+
+export async function getReceipt(id: string): Promise<StockReceipt | undefined> {
+  const row = await getRow<ApiStockReceipt>(PATH, id);
+  return row && fromApi(row);
 }
 
 async function requireReceipt(id: string) {
@@ -102,80 +112,55 @@ async function ensureStockCovers(itemId: string, removed: number, unit: string) 
   }
 }
 
-/** Records goods received and adds them to stock as a PENERIMAAN movement (UC-08). A reused request key is refused (AC-19). */
-export async function createReceipt(input: ReceiptInput, requestKey: string, userId: number): Promise<StockReceipt> {
+/** Records goods received; the API adds them to stock as a PENERIMAAN movement (UC-08). A reused request key is refused (AC-19). */
+export async function createReceipt(input: ReceiptInput, requestKey: string): Promise<StockReceipt> {
   const key = requestKey.trim();
   if (!key) throw new DataError("INVALID", "Permintaan tidak memiliki request key.");
   const item = await getInventoryItem(input.itemId);
   const data = validateReceipt(input, item, todayInJakarta());
-
-  let row: ApiStockReceipt;
   try {
-    row = await postJson<ApiStockReceipt>(PATH, {
-      item_id: Number(data.itemId),
-      quantity: String(data.quantity),
-      receipt_date: data.receiptDate,
-      source_giver: data.sourceGiver,
-      item_condition: data.itemCondition,
-      notes: data.notes || null,
-      request_key: key,
-      created_by: userId,
-    });
+    return fromApi(
+      await postJson<ApiStockReceipt>(PATH, {
+        item_id: Number(data.itemId),
+        quantity: String(data.quantity),
+        receipt_date: data.receiptDate,
+        source_giver: data.sourceGiver,
+        item_condition: data.itemCondition,
+        notes: data.notes || null,
+        request_key: key,
+      }),
+    );
   } catch (error) {
     if (error instanceof DataError && error.code === "CONFLICT") {
       throw new DataError("CONFLICT", "Penerimaan ini sudah tercatat sebelumnya. Tutup formulir lalu periksa riwayat stok.");
     }
     throw error;
   }
-  try {
-    await postMovement({
-      itemId: data.itemId, type: "PENERIMAAN", delta: data.quantity, date: data.receiptDate,
-      notes: `Penerimaan dari ${data.sourceGiver}`, receiptId: String(row.id), userId,
-    });
-  } catch (error) {
-    // A receipt without its movement would not count in stock: undo it.
-    await deleteRow(`${PATH}/${row.id}`).catch((e) => console.error("rollback penerimaan gagal", row.id, e));
-    throw error;
-  }
-  return fromApi(row);
 }
 
-/** Corrects a receipt; a changed quantity becomes a KOREKSI movement (KF-06.3). The item cannot change. Audited (KF-09). */
-export async function updateReceipt(id: string, input: ReceiptInput, userId: number): Promise<StockReceipt> {
+/** Corrects a receipt; the API records a changed quantity as KOREKSI (KF-06.3). The item cannot change. Audited by the API (KF-09). */
+export async function updateReceipt(id: string, input: ReceiptInput): Promise<StockReceipt> {
   const before = await requireReceipt(id);
   const item = await getInventoryItem(String(before.item_id));
   const data = validateReceipt({ ...input, itemId: String(before.item_id) }, item, todayInJakarta());
   const delta = data.quantity - Number(before.quantity);
   if (delta < 0) await ensureStockCovers(data.itemId, -delta, item!.stockUnit);
-
-  const after = await patchJson<ApiStockReceipt>(`${PATH}/${id}`, {
-    quantity: String(data.quantity),
-    receipt_date: data.receiptDate,
-    source_giver: data.sourceGiver,
-    item_condition: data.itemCondition,
-    notes: data.notes || null,
-  });
-  if (delta !== 0) {
-    await postMovement({
-      itemId: data.itemId, type: "KOREKSI", delta, date: todayInJakarta(),
-      notes: `Koreksi penerimaan ${Number(before.quantity)} → ${data.quantity}`, receiptId: id, userId,
-    });
-  }
-  await recordAudit({ userId, action: "UBAH", entityType: "stock_receipts", entityId: id, before, after });
-  return fromApi(after);
+  return fromApi(
+    await patchJson<ApiStockReceipt>(`${PATH}/${id}`, {
+      quantity: String(data.quantity),
+      receipt_date: data.receiptDate,
+      source_giver: data.sourceGiver,
+      item_condition: data.itemCondition,
+      notes: data.notes || null,
+    }),
+  );
 }
 
-/** Soft-deletes a receipt and takes its quantity back out of stock as KOREKSI (KF-09.3). Audited (KF-09). */
-export async function deleteReceipt(id: string, userId: number): Promise<StockReceipt> {
+/** Soft-deletes a receipt; the API takes its quantity back out of stock as KOREKSI (KF-09.3). */
+export async function deleteReceipt(id: string): Promise<StockReceipt> {
   const before = await requireReceipt(id);
   const item = await getInventoryItem(String(before.item_id));
-  const quantity = Number(before.quantity);
-  await ensureStockCovers(String(before.item_id), quantity, item?.stockUnit ?? "");
-  await postMovement({
-    itemId: String(before.item_id), type: "KOREKSI", delta: -quantity, date: todayInJakarta(),
-    notes: `Penerimaan dari ${before.source_giver} dihapus`, receiptId: id, userId,
-  });
+  await ensureStockCovers(String(before.item_id), Number(before.quantity), item?.stockUnit ?? "");
   await deleteRow(`${PATH}/${id}`);
-  await recordAudit({ userId, action: "HAPUS", entityType: "stock_receipts", entityId: id, before, after: null });
   return fromApi(before);
 }

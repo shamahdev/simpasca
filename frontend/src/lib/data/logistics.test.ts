@@ -69,50 +69,42 @@ function backend(stock: number, override?: (call: ApiCall) => [number, unknown?]
   return api.calls;
 }
 const writes = (calls: ApiCall[]) => calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.path}`);
-const movement = (calls: ApiCall[]) => calls.find((c) => c.method === "POST" && c.path === "/api/stock-movements")!.body;
 
-test("UC-07/KF-06.2: a new item records its opening stock as STOK_AWAL", async () => {
+// The API writes STOK_AWAL, PENERIMAAN, KOREKSI and the audit itself (AB-02, KF-09):
+// the frontend sends one write and never posts movements or audit rows.
+
+test("UC-07/KF-06.2: a new item is one write; the API records STOK_AWAL", async () => {
   const calls = backend(0);
-  await createItem(itemInput(), 1);
-  assert.deepEqual(writes(calls), ["POST /api/inventory-items", "POST /api/stock-movements"]);
-  const m = movement(calls);
-  assert.deepEqual([m.item_id, m.movement_type, m.quantity_in, m.quantity_out], [9, "STOK_AWAL", "500", "0"]);
+  await createItem(itemInput());
+  assert.deepEqual(writes(calls), ["POST /api/inventory-items"]);
+  assert.equal(calls[0].body.initial_stock, "500");
+  assert.equal(calls[0].body.created_by, undefined);
 });
 
-test("a new item is removed again when its STOK_AWAL movement fails", async () => {
-  const calls = backend(0, (c) => (c.method === "POST" && c.path === "/api/stock-movements" ? [500, { message: "gagal" }] : undefined));
-  await assert.rejects(createItem(itemInput(), 1), (e) => e instanceof DataError && e.code === "UNAVAILABLE");
-  assert.deepEqual(writes(calls), ["POST /api/inventory-items", "POST /api/stock-movements", "DELETE /api/inventory-items/9"]);
-});
-
-test("KF-06.3: changing the opening stock writes a KOREKSI, never below zero", async () => {
+test("KF-06.3: changing the opening stock is one PATCH, never below zero", async () => {
   const calls = backend(500);
-  await updateItem("7", itemInput({ initialStock: "520" }), 1);
-  assert.deepEqual(writes(calls), ["PATCH /api/inventory-items/7", "POST /api/stock-movements", "POST /api/audit-logs"]);
-  assert.deepEqual([movement(calls).movement_type, movement(calls).quantity_in], ["KOREKSI", "20"]);
+  await updateItem("7", itemInput({ initialStock: "520" }));
+  assert.deepEqual(writes(calls), ["PATCH /api/inventory-items/7"]);
 
   // Only 30 left after shipping: lowering the opening stock by 100 would go negative (AB-02.3).
   const refused = backend(30);
-  await assert.rejects(updateItem("7", itemInput({ initialStock: "400" }), 1), (e) => e instanceof DataError && "initialStock" in (e.fieldErrors ?? {}));
+  await assert.rejects(updateItem("7", itemInput({ initialStock: "400" })), (e) => e instanceof DataError && "initialStock" in (e.fieldErrors ?? {}));
   assert.deepEqual(writes(refused), []);
 });
 
-test("UC-08/AC-22: a receipt adds stock through a PENERIMAAN movement", async () => {
+test("UC-08/AC-22: a receipt is one write with its request key", async () => {
   const calls = backend(0);
-  await createReceipt(receiptInput(), "key-1", 1);
-  assert.deepEqual(writes(calls), ["POST /api/stock-receipts", "POST /api/stock-movements"]);
-  const m = movement(calls);
-  assert.deepEqual([m.movement_type, m.receipt_id, m.quantity_in, m.movement_date], ["PENERIMAAN", 4, "100", "2026-11-20"]);
-  assert.equal(calls[1].body.request_key, "key-1");
+  await createReceipt(receiptInput(), "key-1");
+  assert.deepEqual(writes(calls), ["POST /api/stock-receipts"]);
+  assert.equal(calls.find((c) => c.method === "POST")!.body.request_key, "key-1");
 });
 
 test("AC-17: deleting a receipt is refused when its goods were already shipped", async () => {
   const refused = backend(40);
-  await assert.rejects(deleteReceipt("3", 1), (e) => e instanceof DataError && e.code === "INVALID");
+  await assert.rejects(deleteReceipt("3"), (e) => e instanceof DataError && e.code === "INVALID");
   assert.deepEqual(writes(refused), []);
 
   const calls = backend(150);
-  await deleteReceipt("3", 1);
-  assert.deepEqual(writes(calls), ["POST /api/stock-movements", "DELETE /api/stock-receipts/3", "POST /api/audit-logs"]);
-  assert.deepEqual([movement(calls).movement_type, movement(calls).quantity_out], ["KOREKSI", "100"]);
+  await deleteReceipt("3");
+  assert.deepEqual(writes(calls), ["DELETE /api/stock-receipts/3"]);
 });

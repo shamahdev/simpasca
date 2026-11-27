@@ -27,9 +27,9 @@ const read = <K extends string>(formData: FormData, names: K[]) =>
 export async function saveItem(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = field(formData, "id");
   try {
-    const { id: userId } = await requireUser();
+    await requireUser();
     const input = read(formData, ITEM_FIELDS);
-    const saved = id ? await updateItem(id, input, userId) : await createItem(input, userId);
+    const saved = id ? await updateItem(id, input) : await createItem(input);
     revalidateStock();
     return { status: "success", id: saved.id };
   } catch (error) {
@@ -40,7 +40,8 @@ export async function saveItem(_prev: ActionState, formData: FormData): Promise<
 /** Hapus barang; refused while it has stock history (AC-18). */
 export async function removeItem(id: string): Promise<ActionState> {
   try {
-    await deleteItem(id, (await requireUser()).id);
+    await requireUser();
+    await deleteItem(id);
     revalidateStock();
     return { status: "success", id };
   } catch (error) {
@@ -52,11 +53,11 @@ export async function removeItem(id: string): Promise<ActionState> {
 export async function saveReceipt(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const id = field(formData, "id");
   try {
-    const { id: userId } = await requireUser();
+    await requireUser();
     const input = read(formData, RECEIPT_FIELDS);
     const saved = id
-      ? await updateReceipt(id, input, userId)
-      : await createReceipt(input, field(formData, "requestKey"), userId);
+      ? await updateReceipt(id, input)
+      : await createReceipt(input, field(formData, "requestKey"));
     revalidateStock();
     return { status: "success", id: saved.id };
   } catch (error) {
@@ -67,7 +68,8 @@ export async function saveReceipt(_prev: ActionState, formData: FormData): Promi
 /** Hapus penerimaan; its quantity leaves stock again (KF-09.3). */
 export async function removeReceipt(id: string): Promise<ActionState> {
   try {
-    await deleteReceipt(id, (await requireUser()).id);
+    await requireUser();
+    await deleteReceipt(id);
     revalidateStock();
     return { status: "success", id };
   } catch (error) {

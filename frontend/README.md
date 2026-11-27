@@ -7,24 +7,16 @@ npm run build            # vinext build
 npx wrangler deploy
 ```
 
-The API requires a Bearer token for every data endpoint and has no public read
-routes, so the public read-only view signs in server-side with one account:
+The API serves every read without a token (except accounts), so visitors read
+every page and every write control is hidden; changes need a staff login.
 
 | Variable | Kind | Purpose |
 | --- | --- | --- |
 | `SIMPASCA_API_URL` | plain | API base URL, defaults to `https://api.simpasca.shiddiq.dev` |
-| `SIMPASCA_PUBLIC_USERNAME` | secret | Account visitors read with |
-| `SIMPASCA_PUBLIC_PASSWORD` | secret | Its password |
 
-```bash
-npx wrangler secret put SIMPASCA_PUBLIC_USERNAME
-npx wrangler secret put SIMPASCA_PUBLIC_PASSWORD
-```
-
-Without both secrets the site stays behind `/login`; with them, visitors read
-every page and every write control is hidden. The API has no roles yet, so keep
-that account's password server-side only. `npm run seed` fills a fresh API with
-sample data and asks for a staff login.
+The `SIMPASCA_PUBLIC_USERNAME` / `SIMPASCA_PUBLIC_PASSWORD` secrets are no longer
+used and can be deleted. `npm run seed` fills a fresh API with sample data and
+asks for a staff login.
 
 ## Getting Started
 

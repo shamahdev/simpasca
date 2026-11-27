@@ -8,7 +8,6 @@ import type {
   StockMovement,
 } from "../types.ts";
 import { deleteRow, getRow, listAll, patchJson, postJson } from "./api.ts";
-import { recordAudit } from "./audit.ts";
 import { DataError, invalidIfAny } from "./errors.ts";
 
 /** Days covered by a daily need (AB-01, product planning policy). */
@@ -116,33 +115,6 @@ export async function listItemMovements(itemId: string) {
 /** Fresh (uncached) stock of one item, for checks right before a write. */
 export async function getItemStock(itemId: string): Promise<number> {
   return sumStock(await listAll<ApiStockMovement>("/api/stock-movements", { item_id: itemId }));
-}
-
-/**
- * Writes one stock_movements row (KF-06.2). `delta` > 0 adds stock, < 0 removes it.
- * The API does not write movements itself, so every stock change goes through here or shipments.ts.
- */
-export function postMovement(movement: {
-  itemId: string;
-  type: MovementType;
-  delta: number;
-  date: string;
-  notes: string;
-  userId: number;
-  receiptId?: string;
-  disasterId?: string;
-}) {
-  return postJson("/api/stock-movements", {
-    item_id: Number(movement.itemId),
-    disaster_id: movement.disasterId ? Number(movement.disasterId) : null,
-    receipt_id: movement.receiptId ? Number(movement.receiptId) : null,
-    movement_type: movement.type,
-    quantity_in: String(Math.max(0, movement.delta)),
-    quantity_out: String(Math.max(0, -movement.delta)),
-    movement_date: movement.date,
-    notes: movement.notes,
-    created_by: movement.userId,
-  });
 }
 
 export const todayInJakarta = () =>
@@ -255,29 +227,17 @@ async function requireItem(id: string) {
   return row;
 }
 
-/** Registers an item and its opening stock as a STOK_AWAL movement (UC-07, KF-06.2). */
-export async function createItem(input: ItemInput, userId: number): Promise<InventoryItem> {
-  const data = validateItemInput(input);
-  const row = await postJson<ApiInventoryItem>("/api/inventory-items", { ...itemToApi(data), created_by: userId });
-  try {
-    await postMovement({
-      itemId: String(row.id), type: "STOK_AWAL", delta: data.initialStock,
-      date: todayInJakarta(), notes: "Stok awal", userId,
-    });
-  } catch (error) {
-    // An item without its STOK_AWAL movement would show the wrong stock: undo it.
-    await deleteRow(`/api/inventory-items/${row.id}`).catch((e) => console.error("rollback barang gagal", row.id, e));
-    throw error;
-  }
-  return fromApi(row);
+/** Registers an item; the API records its opening stock as a STOK_AWAL movement (UC-07, KF-06.2). */
+export async function createItem(input: ItemInput): Promise<InventoryItem> {
+  return fromApi(await postJson<ApiInventoryItem>("/api/inventory-items", itemToApi(validateItemInput(input))));
 }
 
 /**
- * Updates an item. A changed opening stock is never written over: the difference
- * is recorded as a KOREKSI movement and may not make stock negative (KF-06.3, AB-02.3).
- * Audited (KF-09).
+ * Updates an item. A changed opening stock is never written over: the API records
+ * the difference as a KOREKSI movement and refuses negative stock (KF-06.3, AB-02.3).
+ * The check here only gives the form a field error first. Audited by the API (KF-09).
  */
-export async function updateItem(id: string, input: ItemInput, userId: number): Promise<InventoryItem> {
+export async function updateItem(id: string, input: ItemInput): Promise<InventoryItem> {
   const data = validateItemInput(input);
   const before = await requireItem(id);
   const delta = data.initialStock - Number(before.initial_stock);
@@ -288,33 +248,11 @@ export async function updateItem(id: string, input: ItemInput, userId: number): 
       throw new DataError("INVALID", message, { initialStock: message });
     }
   }
-  const after = await patchJson<ApiInventoryItem>(`/api/inventory-items/${id}`, itemToApi(data));
-  if (delta !== 0) {
-    await postMovement({
-      itemId: id, type: "KOREKSI", delta, date: todayInJakarta(),
-      notes: `Koreksi stok awal ${Number(before.initial_stock)} → ${data.initialStock}`, userId,
-    });
-  }
-  await recordAudit({ userId, action: "UBAH", entityType: "inventory_items", entityId: id, before, after });
-  return fromApi(after);
+  return fromApi(await patchJson<ApiInventoryItem>(`/api/inventory-items/${id}`, itemToApi(data)));
 }
 
-/**
- * Deletes an item. The API refuses (409) while movements, receipts or shipments
- * reference it, so its stock history stays traceable (AC-18). Audited (KF-09).
- */
-export async function deleteItem(id: string, userId: number): Promise<void> {
-  const before = await requireItem(id);
-  try {
-    await deleteRow(`/api/inventory-items/${id}`);
-  } catch (error) {
-    if (error instanceof DataError && error.code === "CONFLICT") {
-      throw new DataError(
-        "CONFLICT",
-        "Barang ini sudah memiliki riwayat stok, penerimaan, atau pengiriman, sehingga tidak dapat dihapus agar riwayatnya tetap utuh.",
-      );
-    }
-    throw error;
-  }
-  await recordAudit({ userId, action: "HAPUS", entityType: "inventory_items", entityId: id, before, after: null });
+/** Soft delete: the item leaves the lists, its stock history and shipments stay traceable (AC-18). */
+export async function deleteItem(id: string): Promise<void> {
+  await requireItem(id);
+  await deleteRow(`/api/inventory-items/${id}`);
 }
